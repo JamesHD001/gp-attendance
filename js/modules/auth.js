@@ -87,20 +87,11 @@ export class AuthService {
 
   // Listen for authentication changes
   static onAuthStateChanged(callback) {
-    const isLocal = (typeof window !== 'undefined') && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-    if (isLocal) {
-      // Simulate an authenticated user in local dev for UI testing
-      setTimeout(() => callback({ uid: 'devUser' }), 0);
-      return () => {};
-    }
-
     return onAuthStateChanged(auth, callback);
   }
 
   // Redirect user to the correct dashboard
   static async redirectBasedOnRole(user) {
-    const isLocal = (typeof window !== 'undefined') && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-    if (isLocal) return;
 
     if (!user) {
       if (!window.location.pathname.endsWith("index.html")) {
