@@ -1,0 +1,145 @@
+// Firestore Security Rules for YSA GP Attendance System
+// Copy and paste these rules into Firebase Console > Firestore > Rules tab
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to get user's role
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+    
+    // Helper function to get user's assigned class
+    function getUserAssignedClass(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.assignedClass;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+    
+    // Helper function to check if user is instructor
+    function isInstructor() {
+      return request.auth != null && getUserRole(request.auth.uid) == 'instructor';
+    }
+    
+    // Helper function to check if user is leader (read-only)
+    function isLeader() {
+      return request.auth != null && getUserRole(request.auth.uid) == 'leader';
+    }
+    
+    // ====================
+    // USERS COLLECTION
+    // ====================
+    match /users/{userId} {
+      // Users can read their own document
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Admins can read all users
+      allow read: if isAdmin();
+      
+      // Only admins can write to users
+      allow write: if isAdmin();
+    }
+    
+    // ====================
+    // CLASSES COLLECTION
+    // ====================
+    match /classes/{classId} {
+      // Authenticated users can read classes
+      allow read: if request.auth != null;
+      
+      // Only admins can create, update, or delete classes
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // ====================
+    // STUDENTS COLLECTION
+    // ====================
+    match /students/{studentId} {
+      // Authenticated users can read students
+      allow read: if request.auth != null;
+      
+      // Admins can do anything
+      allow create, update, delete: if isAdmin();
+      
+      // Instructors can manage students in their class
+      allow create, update, delete: if isInstructor() && 
+        request.resource.data.classId == getUserAssignedClass(request.auth.uid);
+    }
+    
+    // ====================
+    // ATTENDANCE SESSIONS COLLECTION
+    // ====================
+    match /attendanceSessions/{sessionId} {
+      // Authenticated users can read sessions
+      allow read: if request.auth != null;
+      
+      // Admins can create, update, delete
+      allow create, update, delete: if isAdmin();
+      
+      // Instructors can create sessions for their class
+      allow create: if isInstructor();
+      
+      // Instructors can update sessions they created
+      allow update, delete: if isInstructor() && 
+        resource.data.createdBy == request.auth.uid;
+      
+      // Leaders cannot modify
+      allow create, update, delete: if isLeader() == false;
+    }
+    
+    // ====================
+    // ATTENDANCE RECORDS COLLECTION
+    // ====================
+    match /attendanceRecords/{recordId} {
+      // Authenticated users can read records
+      allow read: if request.auth != null;
+      
+      // Admins can do anything
+      allow create, update, delete: if isAdmin();
+      
+      // Instructors can create and update records for their class's sessions
+      allow create, update: if isInstructor();
+      
+      // Instructors can only delete records from sessions they created
+      allow delete: if isInstructor() && 
+        get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).data.createdBy == request.auth.uid;
+      
+      // Leaders cannot modify (read-only)
+      allow create, update, delete: if isLeader() == false;
+    }
+    
+    // Deny all other access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/*
+RULE SUMMARY:
+=============
+
+ADMINS:
+- Full read/write access to all collections
+- Can manage users, classes, students, and attendance
+
+INSTRUCTORS:
+- Can read all data
+- Can manage students in their assigned class only
+- Can create attendance sessions for their class
+- Can modify attendance records for their sessions
+- Cannot modify other instructors' data
+
+LEADERS:
+- Read-only access to all data
+- Cannot create, update, or delete anything
+- Can view reports and analytics only
+
+UNAUTHENTICATED USERS:
+- No access (denied by default)
+
+*/

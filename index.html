@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>YSA GP Attendance System - Login</title>
+        <link rel="stylesheet" href="css/styles.css">
+    </head>
+    <body>
+        <div class="login-container">
+            <div class="login-box">
+                <h1>YSA Attendance</h1>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" placeholder="Enter your email" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" placeholder="Enter your password" required>
+                    </div>
+
+                    <div id="loginError" class="error-text hidden"></div>
+
+                    <button type="submit" class="btn btn-primary login-button" id="loginBtn">
+                        Sign In
+                    </button>
+                </form>
+
+                <p style="text-align: center; margin-top: var(--spacing-xl); color: var(--text-light); font-size: 12px;">
+                    Powered by YSA GP Program
+                </p>
+            </div>
+        </div>
+
+        <script type="module">
+            import { AuthService } from './js/modules/auth.js';
+            import { showNotification } from './js/modules/ui-utils.js';
+            
+            const loginForm = document.getElementById('loginForm');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const loginBtn = document.getElementById('loginBtn');
+            const loginError = document.getElementById('loginError');
+            
+            // Redirect whenever an authenticated user is observed
+            AuthService.onAuthStateChanged(async (user) => {
+                if (user) {
+                    await AuthService.redirectBasedOnRole(user);
+                }
+            });
+            
+            loginForm.addEventListener('submit', async (e) => {
+            
+                e.preventDefault();
+            
+                loginError.classList.add('hidden');
+                loginBtn.disabled = true;
+            
+                try {
+            
+                    const email = emailInput.value.trim();
+                    const password = passwordInput.value;
+            
+                    if (!email || !password) {
+                        throw new Error('Please fill in all fields');
+                    }
+            
+                    await AuthService.login(email, password);
+            
+                    showNotification('Login successful!', 'success');
+            
+                    // Do NOT manually redirect
+                    // onAuthStateChanged will handle it
+            
+                } catch (error) {
+            
+                    loginError.textContent =
+                        error.message || 'Login failed. Please try again.';
+            
+                    loginError.classList.remove('hidden');
+                    loginBtn.disabled = false;
+            
+                }
+            
+            });
+        </script>
+    </body>
+</html>

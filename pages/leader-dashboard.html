@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leader Dashboard - YSA GP Attendance System</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <span> THE CHURCH OF JESUS CHRIST OF LATTER DAY SAINTS | IJEBU-ODE STAKE YSA GP
+                ATTENDANCE SYSTEM
+            </span>
+        </div>
+    </header>
+    <div class="page-wrapper">
+        <nav class="sidebar">
+            <h2 style="color: var(--primary-blue); margin-bottom: var(--spacing-xl);">YSA</h2>
+            <ul class="nav">
+                <li class="nav-item"><a href="#overview" class="nav-link active">Dashboard</a></li>
+                <li class="nav-item"><a href="#reports" class="nav-link">Reports</a></li>
+                <li class="nav-item"><a href="#analytics" class="nav-link">Analytics</a></li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <!-- Content will be populated by JavaScript -->
+        </main>
+    </div>
+
+    <footer class="footer">
+        <p>&copy; 2026 IJEBU - ODE STAKE YSA GP </p>
+        <span id="datetime"></span>
+    </footer>
+
+    <style>
+        .tab-navigation {
+            display: flex;
+            gap: var(--spacing-md);
+            border-bottom: var(--border-width) solid var(--border-color);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .tab-btn {
+            padding: var(--spacing-md) var(--spacing-lg);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-dark);
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: var(--transition);
+        }
+
+        .tab-btn:hover {
+            color: var(--primary-blue);
+        }
+
+        .tab-btn.active {
+            color: var(--primary-blue);
+            border-bottom-color: var(--primary-blue);
+        }
+
+        .space-y-4 > * + * {
+            margin-top: var(--spacing-lg);
+        }
+    </style>
+
+    <script type="module">
+        import { LeaderDashboard } from '../js/modules/leader-dashboard.js';
+
+        const dashboard = new LeaderDashboard();
+        dashboard.init();
+    </script>
+</body>
+</html>
