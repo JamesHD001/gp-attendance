@@ -33,7 +33,7 @@ export class AuthService {
     const user = auth.currentUser;
 
     if (!user) {
-      window.location.href = "../index.html";
+      window.location.href = "index.html";
       return false;
     }
   
@@ -54,24 +54,22 @@ export class AuthService {
     } catch (error) {
   
       console.error("Role error:", error);
-      window.location.href = "../index.html";
+      window.location.href = "index.html";
       return false;
   
     }
   
   }
-
-  // Logout user
   static async logout() {
     try {
       const isLocal = (typeof window !== 'undefined') && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
       if (isLocal) {
-        window.location.href = "../index.html";
+        window.location.href = "index.html";
         return;
       }
 
       await firebaseSignOut(auth);
-      window.location.href = "../index.html";
+      window.location.href = "index.html";
     } catch (error) {
       console.error("Logout Error:", error);
       throw new Error("Logout failed.");
@@ -94,9 +92,7 @@ export class AuthService {
   static async redirectBasedOnRole(user) {
 
     if (!user) {
-      if (!window.location.pathname.endsWith("index.html")) {
-        window.location.href = "../index.html";
-      }
+      window.location.href = "index.html";
       return;
     }
 
@@ -111,24 +107,24 @@ export class AuthService {
         return;
       }
 
-      let redirectPath = "../index.html";
+      let redirectPath = "index.html";
 
       switch (role) {
 
         case "admin":
-          redirectPath = "../pages/admin-dashboard.html";
+          redirectPath = "pages/admin-dashboard.html";
           break;
 
         case "instructor":
-          redirectPath = "../pages/instructor-dashboard.html";
+          redirectPath = "pages/instructor-dashboard.html";
           break;
 
         case "leader":
-          redirectPath = "../pages/leader-dashboard.html";
+          redirectPath = "pages/leader-dashboard.html";
           break;
 
         default:
-          redirectPath = "../index.html";
+          redirectPath = "index.html";
       }
 
       const currentPage = window.location.pathname;

@@ -39,7 +39,7 @@ export class InstructorDashboard {
     AuthService.onAuthStateChanged(async (user) => {
 
       if (!user) {
-        window.location.href = "../index.html";
+        window.location.href = "index.html";
         return;
       }
     
@@ -186,7 +186,7 @@ export class InstructorDashboard {
     document.getElementById("logoutBtn").addEventListener("click", async () => {
 
       await firebaseSignOut(auth);
-      window.location.href = "../index.html";
+      window.location.href = "index.html";
 
     });
 
