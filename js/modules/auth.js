@@ -33,7 +33,7 @@ export class AuthService {
     const user = auth.currentUser;
 
     if (!user) {
-      window.location.href = "index.html";
+      window.location.href = AuthService.getIndexPath();
       return false;
     }
   
@@ -54,7 +54,7 @@ export class AuthService {
     } catch (error) {
   
       console.error("Role error:", error);
-      window.location.href = "index.html";
+      window.location.href = AuthService.getIndexPath();
       return false;
   
     }
@@ -64,16 +64,22 @@ export class AuthService {
     try {
       const isLocal = (typeof window !== 'undefined') && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
       if (isLocal) {
-        window.location.href = "index.html";
+        window.location.href = AuthService.getIndexPath();
         return;
       }
 
       await firebaseSignOut(auth);
-      window.location.href = "index.html";
+      window.location.href = AuthService.getIndexPath();
     } catch (error) {
       console.error("Logout Error:", error);
       throw new Error("Logout failed.");
     }
+  }
+
+  // Determine the correct path to the login page from the current page
+  static getIndexPath() {
+    if (typeof window === 'undefined') return 'index.html';
+    return window.location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
   }
 
   // Get current logged-in user
@@ -92,7 +98,7 @@ export class AuthService {
   static async redirectBasedOnRole(user) {
 
     if (!user) {
-      window.location.href = "index.html";
+      window.location.href = AuthService.getIndexPath();
       return;
     }
 
@@ -107,7 +113,7 @@ export class AuthService {
         return;
       }
 
-      let redirectPath = "index.html";
+      let redirectPath = AuthService.getIndexPath();
 
       switch (role) {
 
@@ -124,7 +130,7 @@ export class AuthService {
           break;
 
         default:
-          redirectPath = "index.html";
+          redirectPath = AuthService.getIndexPath();
       }
 
       const currentPage = window.location.pathname;
