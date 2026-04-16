@@ -18,8 +18,9 @@ import {
 import { AuthService } from './auth.js';
 
 // Firebase imports for creating leaders/instructors
-import { auth, db } from '../firebase-config.js';
-import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js";
+import { auth, db, firebaseConfig } from '../firebase-config.js';
+import { initializeApp, getApps, deleteApp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-app.js';
+import { getAuth, createUserWithEmailAndPassword, signOut as signOutSecondaryAuth } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js';
 import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
 
 import {
@@ -746,7 +747,12 @@ export class AdminDashboard {
 
       try{
 
-        const cred = await createUserWithEmailAndPassword(auth,email,password);
+        const secondaryApp = getApps().find(app => app.name === 'admin-user-creator') || initializeApp(firebaseConfig, 'admin-user-creator');
+        const secondaryAuth = getAuth(secondaryApp);
+
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+
+        await signOutSecondaryAuth(secondaryAuth);
 
         const uid = cred.user.uid;
 
@@ -768,9 +774,8 @@ export class AdminDashboard {
 
       }catch(err){
 
-        console.error(err);
-
-        showNotification('Failed to create user','error');
+        console.error('Create user failed:', err);
+        showNotification(`Failed to create user: ${err.message || 'Unknown error'}`,'error');
 
       }
 

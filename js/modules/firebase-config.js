@@ -34,4 +34,4 @@ try {
   console.error('Firebase initialization error:', error);
 }
 
-export { app, auth, db, firebaseSignOut };
+export { app, auth, db, firebaseSignOut, firebaseConfig };
