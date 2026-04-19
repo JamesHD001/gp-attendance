@@ -71,6 +71,8 @@ export class AdminDashboard {
     this.students = [];
     this.quoteInterval = null;
     this.currentQuoteIndex = 0;
+    this.currentTab = 'overview';
+    this.eventListenersInitialized = false;
   }
 
   async init() {
@@ -157,6 +159,9 @@ export class AdminDashboard {
 
   setupEventListeners() {
 
+    if (this.eventListenersInitialized) return;
+    this.eventListenersInitialized = true;
+
     const logoutBtn = document.getElementById('logoutBtn');
 
     if (logoutBtn) {
@@ -240,6 +245,9 @@ export class AdminDashboard {
   }
 
   switchTab(tabName, event) {
+
+    if (this.currentTab === tabName) return;
+    this.currentTab = tabName;
 
     document.querySelectorAll('.tab-content').forEach(tab => {
 

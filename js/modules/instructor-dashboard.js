@@ -59,6 +59,8 @@ export class InstructorDashboard {
     this.sessions = [];
     this.quoteInterval = null;
     this.currentQuoteIndex = 0;
+    this.currentTab = 'students';
+    this.eventListenersInitialized = false;
 
     // initialization is performed by the page using `new InstructorDashboard().init()`
   }
@@ -154,6 +156,9 @@ export class InstructorDashboard {
 
   attachEventListeners() {
 
+    if (this.eventListenersInitialized) return;
+    this.eventListenersInitialized = true;
+
     document.querySelectorAll(".tab-btn").forEach(btn => {
 
       btn.addEventListener("click", (e) => {
@@ -222,6 +227,9 @@ export class InstructorDashboard {
   }
 
   switchTab(tabName, event) {
+
+    if (this.currentTab === tabName) return;
+    this.currentTab = tabName;
 
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));

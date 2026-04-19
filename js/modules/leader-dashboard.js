@@ -56,6 +56,8 @@ export class LeaderDashboard {
     this.classes = [];
     this.quoteInterval = null;
     this.currentQuoteIndex = 0;
+    this.currentTab = 'overview';
+    this.eventListenersInitialized = false;
   }
 
   async init() {
@@ -97,6 +99,9 @@ export class LeaderDashboard {
   }
 
   setupEventListeners() {
+
+    if (this.eventListenersInitialized) return;
+    this.eventListenersInitialized = true;
 
     const logoutBtn = document.getElementById("logoutBtn");
 
@@ -170,6 +175,9 @@ export class LeaderDashboard {
   }
 
   switchTab(tabName, event) {
+
+    if (this.currentTab === tabName) return;
+    this.currentTab = tabName;
 
     document.querySelectorAll(".tab-content").forEach(tab => {
 
