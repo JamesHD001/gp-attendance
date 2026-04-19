@@ -488,3 +488,125 @@ export async function createClass(name) {
   return docRef.id;
 
 }
+
+/* ===========================
+   ADVANCED ANALYTICS HELPERS
+=========================== */
+
+// Get attendance stats grouped by time period (weekly, monthly, annually)
+export async function getAttendanceByTimePeriod(classId, period = 'weekly') {
+  const students = await getStudentsByClass(classId);
+  const sessions = await getSessionsByClass(classId);
+  const now = new Date();
+  
+  let filteredSessions = sessions;
+  
+  if (period === 'weekly') {
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    filteredSessions = sessions.filter(s => s.date.toDate() >= oneWeekAgo);
+  } else if (period === 'monthly') {
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    filteredSessions = sessions.filter(s => s.date.toDate() >= oneMonthAgo);
+  } else if (period === 'annually') {
+    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    filteredSessions = sessions.filter(s => s.date.toDate() >= oneYearAgo);
+  }
+
+  const studentStats = {};
+  for (const s of students) {
+    studentStats[s.id] = {
+      name: s.name,
+      present: 0,
+      absent: 0,
+      total: 0,
+      attendanceRate: 0
+    };
+  }
+
+  for (const session of filteredSessions) {
+    const records = await getAttendanceBySession(session.id);
+    for (const r of records) {
+      const st = studentStats[r.studentId];
+      if (!st) continue;
+      st.total += 1;
+      if (r.status === 'present') st.present += 1;
+      else st.absent += 1;
+    }
+  }
+
+  for (const k of Object.keys(studentStats)) {
+    const s = studentStats[k];
+    s.attendanceRate = s.total === 0 ? 0 : Math.round((s.present / s.total) * 100);
+  }
+
+  return {
+    period,
+    totalStudents: students.length,
+    totalSessions: filteredSessions.length,
+    studentStats
+  };
+}
+
+// Get overall gathering place attendance stats
+export async function getGatheringPlaceStats() {
+  const classes = await getClasses();
+  const students = await getStudents();
+  const sessions = await new Promise(async (resolve) => {
+    const sessionsRef = collection(db, "attendanceSessions");
+    const snapshot = await getDocs(sessionsRef);
+    resolve(snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })));
+  });
+
+  const recordsRef = collection(db, "attendanceRecords");
+  const recordsSnapshot = await getDocs(recordsRef);
+  const records = recordsSnapshot.docs.map(doc => doc.data());
+
+  const totalPresent = records.filter(r => r.status === 'present').length;
+  const totalAbsent = records.filter(r => r.status === 'absent').length;
+  const totalRecords = records.length;
+  const overallRate = totalRecords === 0 ? 0 : Math.round((totalPresent / totalRecords) * 100);
+
+  return {
+    totalClasses: classes.length,
+    totalStudents: students.length,
+    totalSessions: sessions.length,
+    totalPresent,
+    totalAbsent,
+    totalRecords,
+    overallRate
+  };
+}
+
+// Get next scheduled class dates based on gathering place schedule
+export function getNextClassDates(daysAhead = 30) {
+  const schedule = {
+    'Monday': { type: 'Family Home Evening', classes: [] },
+    'Wednesday': { type: 'Skill Acquisition', classes: ['ICT', 'Barbing', 'Catering', 'Fashion/Tailoring', 'Makeup/Facial Stylists', 'Hair Making/Dressing', 'Bag Making', 'Shoe Making'] },
+    'Thursday': { type: 'Self-Reliance & Spiritual', classes: ['Self-Reliance', 'BYU Pathway', 'Institute of Religion', 'Temple & Family History', 'Mission Preparation'] },
+    'Friday': { type: 'Skill Acquisition', classes: ['ICT', 'Barbing', 'Catering', 'Fashion/Tailoring', 'Makeup/Facial Stylists', 'Hair Making/Dressing', 'Bag Making', 'Shoe Making'] }
+  };
+
+  const nextDates = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < daysAhead; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + i);
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+
+    if (schedule[dayName]) {
+      nextDates.push({
+        date: date.toISOString().split('T')[0],
+        dayName,
+        type: schedule[dayName].type,
+        classes: schedule[dayName].classes
+      });
+    }
+  }
+
+  return nextDates.slice(0, 14); // Return next 14 scheduled dates
+}
