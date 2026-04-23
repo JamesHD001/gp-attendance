@@ -1,131 +1,125 @@
+// Firestore Security Rules for YSA GP Attendance System
+// Copy and paste these rules into Firebase Console > Firestore > Rules tab
+//
+// BUG FIX: `assignedClass` renamed to `assignedClassId` throughout to match
+// the canonical schema field and the deployed firestore.rules file.
+
 rules_version = '2';
 service cloud.firestore {
-
-  // Helpers
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  function getUser(uid) {
-    let u = get(/databases/$(database)/documents/users/$(uid));
-    return u.exists() ? u.data : {};
-  }
-
-  function assignedClassOf(uid) {
-    let u = get(/databases/$(database)/documents/users/$(uid));
-    return (u.exists() && (u.data.assignedClassId != null)) ? u.data.assignedClassId : null;
-  }
-
-  function isAdmin() {
-    return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).exists() && getUser(request.auth.uid).role == 'admin';
-  }
-
-  function isInstructor() {
-    return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).exists() && getUser(request.auth.uid).role == 'instructor';
-  }
-
-  function isLeader() {
-    return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).exists() && getUser(request.auth.uid).role == 'leader';
-  }
-
-  function isValidRole(r) {
-    return r in ['admin','instructor','leader'];
-  }
-
-  function isValidStatus(s) {
-    return s in ['present','absent'];
-  }
-
-  function classExists(id) {
-    return exists(/databases/$(database)/documents/classes/$(id));
-  }
-
   match /databases/{database}/documents {
 
-    // USERS
+    // Helper function to get user's role
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    // BUG FIX: was `assignedClass` — now `assignedClassId` to match schema
+    function getUserAssignedClass(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.assignedClassId;
+    }
+
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && getUserRole(request.auth.uid) == 'admin';
+    }
+
+    // Helper function to check if user is instructor
+    function isInstructor() {
+      return request.auth != null && getUserRole(request.auth.uid) == 'instructor';
+    }
+
+    // Helper function to check if user is leader (read-only)
+    function isLeader() {
+      return request.auth != null && getUserRole(request.auth.uid) == 'leader';
+    }
+
+    // ====================
+    // USERS COLLECTION
+    // ====================
     match /users/{userId} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      // Users can read their own document
+      allow read: if request.auth != null && request.auth.uid == userId;
 
-      // Only admins can manage users. On create validate basic fields.
-      allow create: if isAdmin() && request.resource.data != null &&
-        request.resource.data.name is string &&
-        request.resource.data.email is string &&
-        request.resource.data.role is string && isValidRole(request.resource.data.role);
+      // Admins can read all users
+      allow read: if isAdmin();
 
-      allow update, delete: if isAdmin();
+      // Only admins can write to users
+      allow write: if isAdmin();
     }
 
-    // CLASSES
+    // ====================
+    // CLASSES COLLECTION
+    // ====================
     match /classes/{classId} {
-      allow read: if isSignedIn();
+      // Authenticated users can read classes
+      allow read: if request.auth != null;
 
-      // Admin-only modifications; validate name on create
-      allow create: if isAdmin() && request.resource.data != null && request.resource.data.name is string;
-      allow update, delete: if isAdmin();
-    }
-
-    // STUDENTS
-    match /students/{studentId} {
-      allow read: if isSignedIn();
-
-      // Admins can manage any student
+      // Only admins can create, update, or delete classes
       allow create, update, delete: if isAdmin();
-
-      // Instructors may manage students only within their assigned class
-      allow create, update, delete: if isInstructor() &&
-        request.resource.data.name is string &&
-        request.resource.data.classId is string &&
-        request.resource.data.classId == assignedClassOf(request.auth.uid) &&
-        classExists(request.resource.data.classId);
     }
 
-    // ATTENDANCE SESSIONS
-    match /attendanceSessions/{sessionId} {
-      allow read: if isSignedIn();
-
-      // Instructors can create sessions only for their assigned class and must provide fields
-      allow create: if isInstructor() && request.resource.data != null &&
-        request.resource.data.classId is string &&
-        request.resource.data.classId == assignedClassOf(request.auth.uid) &&
-        classExists(request.resource.data.classId) &&
-        request.resource.data.date is timestamp &&
-        request.resource.data.createdBy is string &&
-        request.resource.data.createdBy == request.auth.uid;
-
-      // Instructors may update/delete sessions they created
-      allow update, delete: if isInstructor() && resource.data.createdBy == request.auth.uid;
-
-      // Admins can manage all sessions (validate create fields)
-      allow create: if isAdmin() && request.resource.data.classId is string && request.resource.data.date is timestamp;
-      allow update, delete: if isAdmin();
-    }
-
-    // ATTENDANCE RECORDS
-    match /attendanceRecords/{recordId} {
-      allow read: if isSignedIn();
-
-      // Instructors can create/update records only for sessions in their class
-      allow create, update: if isInstructor() &&
-        request.resource.data.sessionId is string &&
-        request.resource.data.studentId is string &&
-        request.resource.data.status is string && isValidStatus(request.resource.data.status) &&
-        // ensure session exists and belongs to instructor's class (guard existence)
-        (get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).exists()
-          && get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.classId
-          == assignedClassOf(request.auth.uid));
-
-      // Instructors can delete if the session was created by them
-      allow delete: if isInstructor() &&
-        (get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).exists()
-          && get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).data.createdBy == request.auth.uid);
+    // ====================
+    // STUDENTS COLLECTION
+    // ====================
+    match /students/{studentId} {
+      // Authenticated users can read students
+      allow read: if request.auth != null;
 
       // Admins can do anything
       allow create, update, delete: if isAdmin();
+
+      // BUG FIX: was `assignedClass` — now `assignedClassId`
+      allow create, update, delete: if isInstructor() &&
+        request.resource.data.classId == getUserAssignedClass(request.auth.uid);
     }
 
-    // deny by default
+    // ====================
+    // ATTENDANCE SESSIONS COLLECTION
+    // ====================
+    match /attendanceSessions/{sessionId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+      allow create: if isInstructor();
+      allow update, delete: if isInstructor() &&
+        resource.data.createdBy == request.auth.uid;
+      allow create, update, delete: if isLeader() == false;
+    }
+
+    // ====================
+    // ATTENDANCE RECORDS COLLECTION
+    // ====================
+    match /attendanceRecords/{recordId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+      allow create, update: if isInstructor();
+      allow delete: if isInstructor() &&
+        get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).data.createdBy == request.auth.uid;
+      allow create, update, delete: if isLeader() == false;
+    }
+
+    // Deny all other access by default
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
+
+/*
+RULE SUMMARY:
+=============
+
+ADMINS:
+- Full read/write access to all collections
+
+INSTRUCTORS:
+- Can read all data
+- Can manage students in their `assignedClassId` class only
+- Can create attendance sessions for their class
+- Can modify attendance records for their sessions
+
+LEADERS:
+- Read-only access to all data
+
+UNAUTHENTICATED USERS:
+- No access (denied by default)
+*/

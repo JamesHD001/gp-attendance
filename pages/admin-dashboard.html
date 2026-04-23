@@ -10,31 +10,31 @@
 <body>
     <header>
         <div class="logo">
-            <span> THE CHURCH OF JESUS CHRIST OF LATTER DAY SAINTS | IJEBU-ODE STAKE YSA GP
-                ATTENDANCE SYSTEM
-            </span>
+            <span>THE CHURCH OF JESUS CHRIST OF LATTER DAY SAINTS | IJEBU-ODE STAKE YSA GP ATTENDANCE SYSTEM</span>
         </div>
     </header>
     <div class="page-wrapper">
         <nav class="sidebar">
             <h2 style="color: var(--primary-blue); margin-bottom: var(--spacing-xl);">YSA</h2>
             <ul class="nav">
-                <li class="nav-item"><a href="#overview" class="nav-link active">Dashboard</a></li>
-                <li class="nav-item"><a href="#classes" class="nav-link">Classes</a></li>
-                <li class="nav-item"><a href="#users" class="nav-link">Users</a></li>
-                <li class="nav-item"><a href="#attendance" class="nav-link">Students</a></li>
-                <li class="nav-item"><a href="#analytics" class="nav-link">Analytics</a></li>
+                <li class="nav-item"><a href="#overview"    class="nav-link active">Dashboard</a></li>
+                <li class="nav-item"><a href="#classes"     class="nav-link">Classes</a></li>
+                <li class="nav-item"><a href="#users"       class="nav-link">Users</a></li>
+                <li class="nav-item"><a href="#attendance"  class="nav-link">Students</a></li>
+                <li class="nav-item"><a href="#analytics"   class="nav-link">Analytics</a></li>
             </ul>
         </nav>
 
         <main class="main-content">
-            <!-- Content will be populated by JavaScript -->
+            <!-- Content populated by JavaScript -->
         </main>
     </div>
+
     <footer class="footer">
-        <p>&copy; 2026 IJEBU - ODE STAKE YSA GP </p>
+        <p>&copy; 2026 IJEBU-ODE STAKE YSA GP</p>
         <span id="datetime"></span>
     </footer>
+
     <style>
         .tab-navigation {
             display: flex;
@@ -42,7 +42,6 @@
             border-bottom: var(--border-width) solid var(--border-color);
             margin-bottom: var(--spacing-lg);
         }
-
         .tab-btn {
             padding: var(--spacing-md) var(--spacing-lg);
             background: none;
@@ -53,20 +52,19 @@
             border-bottom: 3px solid transparent;
             transition: var(--transition);
         }
-
-        .tab-btn:hover {
-            color: var(--primary-blue);
-        }
-
-        .tab-btn.active {
-            color: var(--primary-blue);
-            border-bottom-color: var(--primary-blue);
-        }
-
-        .space-y-4 > * + * {
-            margin-top: var(--spacing-lg);
-        }
+        .tab-btn:hover  { color: var(--primary-blue); }
+        .tab-btn.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
     </style>
+
+    <!-- BUG FIX: live clock — was defined in HTML but never populated -->
+    <script>
+        function updateClock() {
+            const el = document.getElementById('datetime');
+            if (el) el.textContent = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+        }
+        updateClock();
+        setInterval(updateClock, 60000);
+    </script>
 
     <script type="module">
         import { AdminDashboard } from '../js/modules/admin-dashboard.js';
