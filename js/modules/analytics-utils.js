@@ -17,27 +17,79 @@ import {
 } from './ui-utils.js';
 
 export const INSPIRATIONAL_QUOTES = [
-  { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
-  { text: "Success is not final, failure is not fatal: it is the courage to continue that counts.", author: "Winston Churchill" },
-  { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
-  { text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
-  { text: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
-  { text: "Everything you want is on the other side of fear.", author: "George Addair" },
-  { text: "Believe in yourself. You are braver than you think, more talented than you know, and capable of more than you imagine.", author: "Roy T. Bennett" },
-  { text: "I learned that courage was not the absence of fear, but the triumph over it.", author: "Nelson Mandela" },
-  { text: "The only impossible journey is the one you never begin.", author: "Tony Robbins" },
-  { text: "Success is not about the destination, it's about the journey and the person you become.", author: "Unknown" },
-  { text: "You miss 100% of the shots you don't take.", author: "Wayne Gretzky" },
-  { text: "The best time to plant a tree was 20 years ago. The second best time is now.", author: "Chinese Proverb" },
-  { text: "Your limitation—it's only your imagination.", author: "Unknown" },
-  { text: "Push yourself, because no one else is going to do it for you.", author: "Unknown" },
-  { text: "Sometimes we're tested not to show our weaknesses, but to discover our strengths.", author: "Unknown" },
-  { text: "The only way out is through.", author: "Robert Frost" },
-  { text: "Your potential is endless. Your growth is optional.", author: "Unknown" },
-  { text: "Great things never come from comfort zones.", author: "Unknown" },
-  { text: "Dream it. Believe it. Build it.", author: "Unknown" },
-  { text: "Do something today that your future self will thank you for.", author: "Sean Patrick Flanery" }
+  { text: "Trust in the Lord with all thine heart.", author: "Proverbs 3:5" },
+  { text: "With God nothing shall be impossible.", author: "Luke 1:37" },
+  { text: "Charity never faileth.", author: "Moroni 7:46" },
+  { text: "If ye are prepared ye shall not fear.", author: "Doctrine and Covenants 38:30" },
+  { text: "Men are, that they might have joy.", author: "2 Nephi 2:25" },
+  { text: "By small and simple things are great things brought to pass.", author: "Alma 37:6" },
+  { text: "Look unto me in every thought; doubt not, fear not.", author: "Doctrine and Covenants 6:36" },
+  { text: "When ye are in the service of your fellow beings ye are only in the service of your God.", author: "Mosiah 2:17" },
+  { text: "Perfect love casteth out all fear.", author: "Moroni 8:16" },
+  { text: "Ye receive no witness until after the trial of your faith.", author: "Ether 12:6" },
+  { text: "Faith is things which are hoped for and not seen.", author: "Ether 12:6" },
+  { text: "Pray always, that you may come off conqueror.", author: "Doctrine and Covenants 10:5" },
+  { text: "Be ye doers of the word, and not hearers only.", author: "James 1:22" },
+  { text: "A willing mind is accepted of God.", author: "Doctrine and Covenants 64:34" },
+  { text: "Ye are the light of the world.", author: "Matthew 5:14" },
+  { text: "Let your light so shine before men.", author: "Matthew 5:16" },
+  { text: "Ask, and it shall be given you; seek, and ye shall find.", author: "Matthew 7:7" },
+  { text: "To learn is to choose growth every day.", author: "Gospel Principle" },
+  { text: "Discipline today builds confidence tomorrow.", author: "Inspiration" },
+  { text: "He who serves most, leads best.", author: "Leadership Saying" },
+  { text: "Progress is often quiet, but it is never wasted.", author: "Inspiration" },
+  { text: "Consistency is a spiritual and practical superpower.", author: "Inspiration" },
+  { text: "Your effort matters, even before results appear.", author: "Inspiration" },
+  { text: "Small daily obedience creates big lifelong strength.", author: "Gospel Inspiration" },
+  { text: "Excellence grows where humility is welcome.", author: "Inspiration" },
+  { text: "You can begin again today with faith.", author: "Inspiration" },
+  { text: "A teachable heart is a powerful gift.", author: "Inspiration" },
+  { text: "Prayer opens doors that pressure cannot.", author: "Gospel Inspiration" },
+  { text: "Show up. Serve well. Keep learning.", author: "Inspiration" },
+  { text: "You do not have to be perfect to be useful.", author: "Inspiration" },
+  { text: "God can do much with a willing soul.", author: "Gospel Inspiration" },
+  { text: "Gratitude turns ordinary days into holy opportunities.", author: "Gospel Inspiration" },
+  { text: "Courage often looks like your next right step.", author: "Inspiration" },
+  { text: "Choose kindness quickly and often.", author: "Inspiration" },
+  { text: "Strong communities are built by dependable people.", author: "Inspiration" },
+  { text: "Let purpose, not pressure, set your pace.", author: "Inspiration" },
+  { text: "Learning by doing turns hope into skill.", author: "Inspiration" },
+  { text: "Hard work and prayer are good partners.", author: "Gospel Inspiration" },
+  { text: "Peace grows where forgiveness is practiced.", author: "Gospel Inspiration" },
+  { text: "Integrity is what you do when no one is checking.", author: "Inspiration" },
+  { text: "The Lord strengthens those who keep trying.", author: "Gospel Inspiration" },
+  { text: "Your future is shaped by faithful habits.", author: "Inspiration" },
+  { text: "Patience is not passive; it is steady trust.", author: "Inspiration" },
+  { text: "Make room for both ambition and compassion.", author: "Inspiration" },
+  { text: "Preparation invites confidence and calm.", author: "Inspiration" },
+  { text: "Work with your hands; grow with your heart.", author: "Inspiration" },
+  { text: "Where unity lives, miracles multiply.", author: "Gospel Inspiration" },
+  { text: "A class becomes great when everyone belongs.", author: "Inspiration" },
+  { text: "Be honest, be reliable, be kind.", author: "Inspiration" },
+  { text: "Faithful effort is never lost.", author: "Gospel Inspiration" },
+  { text: "Serve one person today with full attention.", author: "Inspiration" },
+  { text: "Your gifts grow as you use them.", author: "Inspiration" },
+  { text: "Choose progress over comparison.", author: "Inspiration" },
+  { text: "Let truth guide your decisions.", author: "Gospel Inspiration" },
+  { text: "Hope is stronger when shared.", author: "Inspiration" },
+  { text: "Do simple things with great love.", author: "Inspiration" },
+  { text: "The right time to improve is now.", author: "Inspiration" },
+  { text: "Lift others, and you rise too.", author: "Inspiration" },
+  { text: "Be faithful in little things.", author: "Luke 16:10" },
+  { text: "Press forward with a steadfastness in Christ.", author: "2 Nephi 31:20" }
 ];
+
+function createAnalyticsSkeleton() {
+  const skeleton = document.createElement('div');
+  skeleton.className = 'analytics-skeleton';
+  skeleton.innerHTML = `
+    <div class="skeleton-block skeleton-quote"></div>
+    <div class="skeleton-block skeleton-section"></div>
+    <div class="skeleton-block skeleton-section"></div>
+    <div class="skeleton-block skeleton-section"></div>
+  `;
+  return skeleton;
+}
 
 export function displayRandomQuote(container) {
   const quote = INSPIRATIONAL_QUOTES[Math.floor(Math.random() * INSPIRATIONAL_QUOTES.length)];
@@ -62,6 +114,8 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
   const { assignedClassId = null, quoteIntervalRef = {} } = opts;
 
   clearElement(tab);
+  const skeleton = createAnalyticsSkeleton();
+  tab.appendChild(skeleton);
 
   const mainContainer = document.createElement('div');
   mainContainer.className = 'analytics-container';
@@ -250,5 +304,6 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
   printBtn.className = 'btn btn-secondary mt-lg mb-lg';
   mainContainer.insertBefore(printBtn, mainContainer.firstChild);
 
+  clearElement(tab);
   tab.appendChild(mainContainer);
 }

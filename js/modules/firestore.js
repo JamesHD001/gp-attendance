@@ -14,6 +14,7 @@ import {
   deleteDoc,
   query,
   where,
+  orderBy,
   serverTimestamp,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
@@ -246,17 +247,16 @@ export async function getSessionsByClass(classId) {
 
   const q = query(
     sessionsRef,
-    where("classId", "==", classId)
+    where("classId", "==", classId),
+    orderBy("date", "desc")
   );
 
   const snapshot = await getDocs(q);
 
-  return snapshot.docs
-    .map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
-    .sort((a, b) => b.date.toMillis() - a.date.toMillis());
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
 
 }
 
@@ -349,6 +349,33 @@ export async function getAttendanceBySession(sessionId) {
 
 }
 
+// Get attendance records for multiple sessions in batch (avoids N+1 reads)
+async function getAttendanceRecordsBySessionIds(sessionIds) {
+  if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return {};
+  }
+
+  const recordsRef = collection(db, "attendanceRecords");
+  const sessionsChunkSize = 30; // Firestore `in` query max values
+  const recordsBySession = {};
+
+  for (let i = 0; i < sessionIds.length; i += sessionsChunkSize) {
+    const chunk = sessionIds.slice(i, i + sessionsChunkSize);
+    const q = query(recordsRef, where("sessionId", "in", chunk));
+    const snapshot = await getDocs(q);
+
+    for (const recordDoc of snapshot.docs) {
+      const record = { id: recordDoc.id, ...recordDoc.data() };
+      if (!recordsBySession[record.sessionId]) {
+        recordsBySession[record.sessionId] = [];
+      }
+      recordsBySession[record.sessionId].push(record);
+    }
+  }
+
+  return recordsBySession;
+}
+
 
 /* ===========================
    INITIALIZE DEFAULT GP CLASSES
@@ -435,6 +462,9 @@ export async function deleteSession(sessionId) {
 export async function calculateAttendanceStats(classId) {
   const students = await getStudentsByClass(classId);
   const sessions = await getSessionsByClass(classId);
+  const recordsBySession = await getAttendanceRecordsBySessionIds(
+    sessions.map(session => session.id)
+  );
 
   const studentStats = {};
 
@@ -450,7 +480,7 @@ export async function calculateAttendanceStats(classId) {
   }
 
   for (const session of sessions) {
-    const records = await getAttendanceBySession(session.id);
+    const records = recordsBySession[session.id] || [];
     for (const r of records) {
       const st = studentStats[r.studentId];
       if (!st) continue;
@@ -523,8 +553,12 @@ export async function getAttendanceByTimePeriod(classId, period = 'weekly') {
     };
   }
 
+  const recordsBySession = await getAttendanceRecordsBySessionIds(
+    filteredSessions.map(session => session.id)
+  );
+
   for (const session of filteredSessions) {
-    const records = await getAttendanceBySession(session.id);
+    const records = recordsBySession[session.id] || [];
     for (const r of records) {
       const st = studentStats[r.studentId];
       if (!st) continue;
@@ -551,14 +585,12 @@ export async function getAttendanceByTimePeriod(classId, period = 'weekly') {
 export async function getGatheringPlaceStats() {
   const classes = await getClasses();
   const students = await getStudents();
-  const sessions = await new Promise(async (resolve) => {
-    const sessionsRef = collection(db, "attendanceSessions");
-    const snapshot = await getDocs(sessionsRef);
-    resolve(snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })));
-  });
+  const sessionsRef = collection(db, "attendanceSessions");
+  const sessionsSnapshot = await getDocs(sessionsRef);
+  const sessions = sessionsSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
 
   const recordsRef = collection(db, "attendanceRecords");
   const recordsSnapshot = await getDocs(recordsRef);
