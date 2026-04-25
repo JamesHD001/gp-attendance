@@ -477,7 +477,8 @@ export class InstructorDashboard {
       assignedClassId: this.assignedClass,
       requireAuth: true,
       isDemoMode: this.isDemoMode,
-      emptyStateMessage: 'Graduation readiness loads only for authenticated instructors assigned to a real class.'
+      emptyStateMessage: 'Graduation readiness loads only for authenticated instructors assigned to a real class.',
+      noClassMessage: 'No class is assigned to this instructor yet, so graduation readiness cannot be calculated.'
     });
   }
 }

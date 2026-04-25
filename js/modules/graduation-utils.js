@@ -33,12 +33,14 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
     assignedClassId = null,
     requireAuth = false,
     isDemoMode = false,
-    emptyStateMessage = 'Sign in to view graduation readiness.'
+    emptyStateMessage = 'Sign in to view graduation readiness.',
+    noClassMessage = 'No class is available for graduation readiness yet.'
   } = opts;
   clearElement(tab);
 
   const container = document.createElement('div');
   container.className = 'analytics-container';
+  const validClasses = (classes || []).filter(item => item && item.id);
 
   const isAuthenticated = Boolean(auth?.currentUser);
 
@@ -47,6 +49,17 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
       <div class="card">
         <div class="card-header">Graduation Readiness</div>
         <div class="card-body">${emptyStateMessage}</div>
+      </div>
+    `;
+    tab.appendChild(container);
+    return;
+  }
+
+  if (assignedClassId == null && validClasses.length === 0) {
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-header">Graduation Readiness</div>
+        <div class="card-body">${noClassMessage}</div>
       </div>
     `;
     tab.appendChild(container);
@@ -70,7 +83,7 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
     ? [{ label: 'Your Class', value: assignedClassId }]
     : [
         { label: 'Select Class...', value: '' },
-        ...classes.map(item => ({ label: item.name, value: item.id }))
+        ...validClasses.map(item => ({ label: item.name, value: item.id }))
       ];
 
   const classSelect = createSelect(classOptions, 'graduationClassSelect', assignedClassId || '');
@@ -94,7 +107,7 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
       return;
     }
 
-    const overview = await getGraduationOverview(classes.map(item => item.id));
+    const overview = await getGraduationOverview(validClasses.map(item => item.id));
     summaryContainer.appendChild(createSummaryGrid([
       { label: 'Tracked Classes', value: overview.totalClasses },
       { label: 'Students', value: overview.totalStudents },
@@ -109,7 +122,7 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
 
     const classId = classSelect.value;
     if (!classId) {
-      detailsContainer.innerHTML = '<p class="text-muted">Select a class to view graduation readiness.</p>';
+      detailsContainer.innerHTML = `<p class="text-muted">${assignedClassId ? noClassMessage : 'Select a class to view graduation readiness.'}</p>`;
       return;
     }
 
@@ -163,7 +176,7 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
   } catch (error) {
     console.error('Error initializing graduation tab:', error);
     clearElement(tab);
-    tab.innerHTML = '<p class="text-danger">Unable to initialize graduation readiness right now.</p>';
+    tab.innerHTML = '<p class="text-danger">Unable to load graduation readiness for the available class data right now.</p>';
     return;
   }
 
