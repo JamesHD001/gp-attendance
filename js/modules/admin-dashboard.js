@@ -14,9 +14,10 @@ import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs
 import {
   clearElement, showNotification, createTable, createCard,
   createStatCard, createButton, createInput, createSelect,
-  createModal
+  createModal, createStatsSkeleton, createTableSkeleton
 } from './ui-utils.js';
 import { renderAnalyticsTab } from './analytics-utils.js';
+import { renderGraduationTab } from './graduation-utils.js';
 
 export class AdminDashboard {
   constructor() {
@@ -24,6 +25,8 @@ export class AdminDashboard {
     this.classes = [];
     this.users = [];
     this.students = [];
+    this.isDemoMode = false;
+    this.isLoading = true;
     this.currentTab = 'overview';
     this.eventListenersInitialized = false;
   }
@@ -33,16 +36,21 @@ export class AdminDashboard {
       (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     if (isLocal) {
+      this.isDemoMode = true;
       this.currentUser = AuthService.getCurrentUser();
+      this.renderDashboard();
+      this.attachFreshEventListeners();
       try {
         await this.loadClasses();
         await this.loadUsers();
         await this.loadStudents();
       } catch (error) {
         console.warn('Admin local-mode data load failed:', error);
+      } finally {
+        this.isLoading = false;
+        this.renderDashboard();
+        this.attachFreshEventListeners();
       }
-      this.renderDashboard();
-      this.setupEventListeners();
       return;
     }
 
@@ -54,17 +62,27 @@ export class AdminDashboard {
       if (!allowed) return;
       this.currentUser = user;
       try {
+        this.isLoading = true;
+        this.renderDashboard();
+        this.attachFreshEventListeners();
         await initializeClasses();
         await this.loadClasses();
         await this.loadUsers();
         await this.loadStudents();
-        this.renderDashboard();
-        this.setupEventListeners();
       } catch (error) {
         console.error('Admin initialization failed:', error);
         showNotification('Failed to initialize admin dashboard', 'error');
+      } finally {
+        this.isLoading = false;
+        this.renderDashboard();
+        this.attachFreshEventListeners();
       }
     });
+  }
+
+  attachFreshEventListeners() {
+    this.eventListenersInitialized = false;
+    this.setupEventListeners();
   }
 
   async loadClasses() {
@@ -92,7 +110,7 @@ export class AdminDashboard {
       btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab, e)));
 
     const navLinks = document.querySelectorAll('.nav-link');
-    const mapHash = h => ({ overview:'overview', classes:'classes', users:'users', attendance:'students', analytics:'analytics' })[(h||'').replace('#','')] || (h||'').replace('#','');
+    const mapHash = h => ({ overview:'overview', classes:'classes', users:'users', attendance:'students', analytics:'analytics', graduation:'graduation' })[(h||'').replace('#','')] || (h||'').replace('#','');
 
     navLinks.forEach(link => {
       link.addEventListener('click', (e) => {
@@ -129,6 +147,7 @@ export class AdminDashboard {
     if (tabName === 'users') this.renderUsersTab();
     if (tabName === 'students') this.renderStudentsTab();
     if (tabName === 'analytics') this.renderAnalyticsTab();
+    if (tabName === 'graduation') this.renderGraduationTab();
   }
 
   renderDashboard() {
@@ -145,7 +164,8 @@ export class AdminDashboard {
       <button class="tab-btn" data-tab="classes">Classes</button>
       <button class="tab-btn" data-tab="users">Leaders / Instructors</button>
       <button class="tab-btn" data-tab="students">Students</button>
-      <button class="tab-btn" data-tab="analytics">Attendance Reports</button>`;
+      <button class="tab-btn" data-tab="analytics">Attendance Reports</button>
+      <button class="tab-btn" data-tab="graduation">Graduation</button>`;
     main.appendChild(tabNav);
     const tabs = document.createElement('div');
     tabs.innerHTML = `
@@ -153,13 +173,18 @@ export class AdminDashboard {
       <div id="classesTab" class="tab-content hidden"></div>
       <div id="usersTab" class="tab-content hidden"></div>
       <div id="studentsTab" class="tab-content hidden"></div>
-      <div id="analyticsTab" class="tab-content hidden"></div>`;
+      <div id="analyticsTab" class="tab-content hidden"></div>
+      <div id="graduationTab" class="tab-content hidden"></div>`;
     main.appendChild(tabs);
     this.renderOverviewTab();
   }
 
   renderOverviewTab() {
     const tab = document.getElementById('overviewTab'); clearElement(tab);
+    if (this.isLoading) {
+      tab.appendChild(createStatsSkeleton(3));
+      return;
+    }
     const stats = document.createElement('div'); stats.className = 'flex gap-lg flex-wrap';
     stats.appendChild(createStatCard('Classes', this.classes.length));
     stats.appendChild(createStatCard('Leaders/Instructors', this.users.length));
@@ -172,6 +197,10 @@ export class AdminDashboard {
     const h = document.createElement('div'); h.className = 'flex-between mb-lg';
     h.innerHTML = `<h2>Classes</h2><button class="btn btn-primary" id="addClassBtn">Add Class</button>`;
     tab.appendChild(h);
+    if (this.isLoading) {
+      tab.appendChild(createTableSkeleton(5, 4));
+      return;
+    }
     const rows = this.classes.map(cls => {
       const instructor = this.users.find(u => u.id === cls.instructorId);
       return {
@@ -214,6 +243,10 @@ export class AdminDashboard {
     const h = document.createElement('div'); h.className = 'flex-between mb-lg';
     h.innerHTML = `<h2>Leaders / Instructors</h2><button class="btn btn-primary" id="addUserBtn">Add User</button>`;
     tab.appendChild(h);
+    if (this.isLoading) {
+      tab.appendChild(createTableSkeleton(5, 5));
+      return;
+    }
     const rows = this.users.map(user => ({
       'Name': user.name, 'Email': user.email, 'Role': user.role,
       // FIX Bug 5: only use assignedClassId
@@ -237,6 +270,10 @@ export class AdminDashboard {
     const h = document.createElement('div'); h.className = 'flex-between mb-lg';
     h.innerHTML = `<h2>Students</h2><button class="btn btn-primary" id="addStudentBtn">Add Student</button>`;
     tab.appendChild(h);
+    if (this.isLoading) {
+      tab.appendChild(createTableSkeleton(6, 3));
+      return;
+    }
     const rows = this.students.map(student => {
       const cls = this.classes.find(c => c.id === student.classId);
       return {
@@ -274,7 +311,20 @@ export class AdminDashboard {
 
   async renderAnalyticsTab() {
     const tab = document.getElementById('analyticsTab');
-    await renderAnalyticsTab(tab, this.classes);
+    await renderAnalyticsTab(tab, this.classes, {
+      requireAuth: true,
+      isDemoMode: this.isDemoMode,
+      emptyStateMessage: 'Attendance analytics is available after signing in as an authenticated admin.'
+    });
+  }
+
+  async renderGraduationTab() {
+    const tab = document.getElementById('graduationTab');
+    await renderGraduationTab(tab, this.classes, {
+      requireAuth: true,
+      isDemoMode: this.isDemoMode,
+      emptyStateMessage: 'Graduation readiness is available after signing in as an authenticated admin.'
+    });
   }
 
   showAddUserModal() {

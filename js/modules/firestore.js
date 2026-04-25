@@ -380,6 +380,79 @@ async function getAttendanceRecordsBySessionIds(sessionIds) {
   return recordsBySession;
 }
 
+/* ===========================
+   PERFORMANCE / RECOMMENDATIONS
+=========================== */
+
+function buildPerformanceRecordId(classId, studentId, instructorId) {
+  return `${classId}__${studentId}__${instructorId}`;
+}
+
+export async function savePerformanceRating({
+  classId,
+  studentId,
+  instructorId,
+  rating,
+  recommendation = '',
+  studentName = ''
+}) {
+  const recordId = buildPerformanceRecordId(classId, studentId, instructorId);
+  const performanceRef = doc(db, 'performanceRatings', recordId);
+
+  await setDoc(performanceRef, {
+    classId,
+    studentId,
+    instructorId,
+    studentName,
+    rating: Number(rating),
+    recommendation: recommendation.trim(),
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+
+  return recordId;
+}
+
+export async function getPerformanceRatingsByClass(classId) {
+  const performanceRef = collection(db, 'performanceRatings');
+  const q = query(performanceRef, where('classId', '==', classId));
+  const snapshot = await getDocs(q);
+
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+}
+
+export async function getPerformanceRatingForStudent(classId, studentId, instructorId) {
+  const recordId = buildPerformanceRecordId(classId, studentId, instructorId);
+  const performanceRef = doc(db, 'performanceRatings', recordId);
+  const snapshot = await getDoc(performanceRef);
+
+  if (!snapshot.exists()) return null;
+
+  return {
+    id: snapshot.id,
+    ...snapshot.data()
+  };
+}
+
+function buildStudentPerformanceMap(performanceRatings) {
+  return performanceRatings.reduce((acc, item) => {
+    acc[item.studentId] = item;
+    return acc;
+  }, {});
+}
+
+function calculateGraduationScore(attendanceRate, performanceRating) {
+  const normalizedPerformance = Math.max(0, Math.min(100, Math.round((Number(performanceRating || 0) / 5) * 100)));
+  const graduationRate = Math.round((attendanceRate * 0.7) + (normalizedPerformance * 0.3));
+
+  return {
+    normalizedPerformance,
+    graduationRate
+  };
+}
+
 
 /* ===========================
    INITIALIZE DEFAULT GP CLASSES
@@ -508,6 +581,80 @@ export async function calculateAttendanceStats(classId) {
     studentStats
   };
 
+}
+
+export async function calculateGraduationStats(classId) {
+  const [attendanceStats, performanceRatings, classData] = await Promise.all([
+    calculateAttendanceStats(classId),
+    getPerformanceRatingsByClass(classId),
+    getClassById(classId)
+  ]);
+
+  const performanceByStudent = buildStudentPerformanceMap(performanceRatings);
+  const studentGraduationStats = {};
+  let graduationTotal = 0;
+  let performanceCount = 0;
+
+  for (const [studentId, attendance] of Object.entries(attendanceStats.studentStats)) {
+    const performance = performanceByStudent[studentId] || null;
+    const performanceRating = Number(performance?.rating || 0);
+    const { normalizedPerformance, graduationRate } = calculateGraduationScore(
+      attendance.attendanceRate,
+      performanceRating
+    );
+
+    if (performance) {
+      performanceCount += 1;
+    }
+
+    graduationTotal += graduationRate;
+
+    studentGraduationStats[studentId] = {
+      studentId,
+      name: attendance.name,
+      attendanceRate: attendance.attendanceRate,
+      attendancePresent: attendance.present,
+      attendanceAbsent: attendance.absent,
+      attendanceTotal: attendance.total,
+      performanceRating,
+      performanceScore: normalizedPerformance,
+      recommendation: performance?.recommendation || '',
+      graduationRate
+    };
+  }
+
+  const studentsCount = Object.keys(studentGraduationStats).length;
+  const averageGraduationRate = studentsCount === 0
+    ? 0
+    : Math.round(graduationTotal / studentsCount);
+
+  return {
+    classId,
+    className: classData?.name || classId,
+    totalStudents: attendanceStats.totalStudents,
+    totalSessions: attendanceStats.totalSessions,
+    ratedStudents: performanceCount,
+    averageGraduationRate,
+    studentGraduationStats
+  };
+}
+
+export async function getGraduationOverview(classIds = []) {
+  const statsList = await Promise.all(classIds.map(classId => calculateGraduationStats(classId)));
+
+  const totalStudents = statsList.reduce((sum, item) => sum + item.totalStudents, 0);
+  const ratedStudents = statsList.reduce((sum, item) => sum + item.ratedStudents, 0);
+  const overallAverage = statsList.length === 0
+    ? 0
+    : Math.round(statsList.reduce((sum, item) => sum + item.averageGraduationRate, 0) / statsList.length);
+
+  return {
+    totalClasses: statsList.length,
+    totalStudents,
+    ratedStudents,
+    overallAverage,
+    classes: statsList
+  };
 }
 
 export async function createClass(name) {

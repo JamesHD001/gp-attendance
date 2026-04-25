@@ -4,13 +4,15 @@ import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-
 import {
   getStudentsByClass, addStudent, deleteStudent,
   getSessionsByClass, createSession, deleteSession,
-  getAttendanceBySession, getClassById
+  getAttendanceBySession, getClassById,
+  getPerformanceRatingsByClass, savePerformanceRating
 } from './firestore.js';
 import {
-  formatDate, createTable, createButton,
+  formatDate, createTable, createTableSkeleton,
   clearElement, showNotification
 } from './ui-utils.js';
 import { renderAnalyticsTab } from './analytics-utils.js';
+import { renderGraduationTab } from './graduation-utils.js';
 
 export class InstructorDashboard {
   constructor() {
@@ -20,6 +22,9 @@ export class InstructorDashboard {
     this.assignedClassName = '';
     this.students = [];
     this.sessions = [];
+    this.performanceRatings = [];
+    this.isDemoMode = false;
+    this.isLoading = true;
     this.currentTab = 'students';
     this.eventListenersInitialized = false;
   }
@@ -29,18 +34,24 @@ export class InstructorDashboard {
       (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     if (isLocal) {
+      this.isDemoMode = true;
       this.currentUser = AuthService.getCurrentUser();
       this.userData = { name: 'Local Instructor', assignedClassId: 'local-class' };
       this.assignedClass = 'local-class';
       this.assignedClassName = 'Demo Class';
+      this.renderDashboard();
+      this.attachFreshEventListeners();
       try {
         await this.loadStudents();
         await this.loadSessions();
+        await this.loadPerformanceRatings();
       } catch (error) {
         console.warn('Instructor local-mode data load failed:', error);
+      } finally {
+        this.isLoading = false;
+        this.renderDashboard();
+        this.attachFreshEventListeners();
       }
-      this.renderDashboard();
-      this.attachEventListeners();
       return;
     }
 
@@ -49,12 +60,25 @@ export class InstructorDashboard {
       const allowed = await AuthService.requireRole("instructor");
       if (!allowed) return;
       this.currentUser = user;
+      this.isLoading = true;
       await this.loadInstructorData();
-      await this.loadStudents();
-      await this.loadSessions();
       this.renderDashboard();
-      this.attachEventListeners();
+      this.attachFreshEventListeners();
+      try {
+        await this.loadStudents();
+        await this.loadSessions();
+        await this.loadPerformanceRatings();
+      } finally {
+        this.isLoading = false;
+        this.renderDashboard();
+        this.attachFreshEventListeners();
+      }
     });
+  }
+
+  attachFreshEventListeners() {
+    this.eventListenersInitialized = false;
+    this.attachEventListeners();
   }
 
   async loadInstructorData() {
@@ -90,6 +114,15 @@ export class InstructorDashboard {
     }
   }
 
+  async loadPerformanceRatings() {
+    if (!this.assignedClass) {
+      this.performanceRatings = [];
+      return;
+    }
+
+    this.performanceRatings = await getPerformanceRatingsByClass(this.assignedClass);
+  }
+
   renderDashboard() {
     const mainContent = document.querySelector('.main-content');
     if (!mainContent) return;
@@ -104,10 +137,14 @@ export class InstructorDashboard {
       <nav class="dashboard-nav">
         <button class="tab-btn active" data-tab="students">Students</button>
         <button class="tab-btn" data-tab="attendance">Attendance</button>
+        <button class="tab-btn" data-tab="performance">Performance</button>
+        <button class="tab-btn" data-tab="graduation">Graduation</button>
         <button class="tab-btn" data-tab="stats">Statistics</button>
       </nav>
       <div id="studentsTab" class="tab-content"></div>
       <div id="attendanceTab" class="tab-content hidden"></div>
+      <div id="performanceTab" class="tab-content hidden"></div>
+      <div id="graduationTab" class="tab-content hidden"></div>
       <div id="statsTab" class="tab-content hidden"></div>
     `;
     this.renderStudentsTab();
@@ -119,7 +156,7 @@ export class InstructorDashboard {
     document.querySelectorAll(".tab-btn").forEach(btn =>
       btn.addEventListener("click", (e) => this.switchTab(e.target.dataset.tab, e)));
     const navLinks = document.querySelectorAll('.nav-link');
-    const mapHash = h => ({ overview:'students',students:'students',attendance:'attendance',analytics:'stats' })[(h||'').replace('#','')] || (h||'').replace('#','');
+    const mapHash = h => ({ overview:'students',students:'students',attendance:'attendance',performance:'performance',graduation:'graduation',analytics:'stats' })[(h||'').replace('#','')] || (h||'').replace('#','');
     navLinks.forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
@@ -144,6 +181,8 @@ export class InstructorDashboard {
     if (event?.target) event.target.classList.add('active');
     if (tabName === 'students') this.renderStudentsTab();
     if (tabName === 'attendance') this.renderAttendanceTab();
+    if (tabName === 'performance') this.renderPerformanceTab();
+    if (tabName === 'graduation') this.renderGraduationTab();
     if (tabName === 'stats') this.renderStatsTab();
   }
 
@@ -189,6 +228,11 @@ export class InstructorDashboard {
     formWrap.append(nameInput, emailInput, addBtn);
     container.appendChild(formWrap);
 
+    if (this.isLoading) {
+      container.appendChild(createTableSkeleton(6, 3));
+      return;
+    }
+
     if (this.students.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'text-muted';
@@ -221,6 +265,12 @@ export class InstructorDashboard {
   /* ---- ATTENDANCE TAB ---- */
   renderAttendanceTab() {
     const container = document.getElementById("attendanceTab");
+    if (this.isLoading) {
+      clearElement(container);
+      container.innerHTML = '<h2>Attendance</h2>';
+      container.appendChild(createTableSkeleton(5, 3));
+      return;
+    }
     // FIX Bug 10: formatDate correctly handles Firestore Timestamps via its toDate() guard
     const sessionsHTML = this.sessions.map(session => `
       <tr>
@@ -287,12 +337,122 @@ export class InstructorDashboard {
           const student = this.students.find(s => s.id === sel.dataset.id);
           records.push({ studentId: sel.dataset.id, name: student?.name || '', status: sel.value });
         });
-        await createSession({ class: this.assignedClass, date: new Date().toISOString().split("T")[0], records, createdBy: this.currentUser.uid });
+        await createSession({ class: this.assignedClass, date: new Date().toISOString().split("T")[0], records, createdBy: this.currentUser?.uid || 'local-instructor' });
         await this.loadSessions();
         this.renderAttendanceTab();
         showNotification('Attendance saved', 'success');
       } catch (err) { console.error(err); showNotification('Failed to save attendance', 'error'); btn.disabled = false; }
     });
+  }
+
+  /* ---- PERFORMANCE TAB ---- */
+  renderPerformanceTab() {
+    const container = document.getElementById("performanceTab");
+    clearElement(container);
+
+    container.innerHTML = `
+      <h2>Performance</h2>
+      <p class="text-muted">Record a rating from 1 to 5 and add recommendations for each student in your class.</p>
+    `;
+
+    if (this.isLoading) {
+      container.appendChild(createTableSkeleton(6, 4));
+      return;
+    }
+
+    if (this.students.length === 0) {
+      container.innerHTML += '<p class="text-muted">No students available for rating yet.</p>';
+      return;
+    }
+
+    const ratingsByStudent = this.performanceRatings.reduce((acc, item) => {
+      acc[item.studentId] = item;
+      return acc;
+    }, {});
+
+    const table = document.createElement('table');
+    table.className = 'data-table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Student</th>
+          <th>Rating</th>
+          <th>Recommendation</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+
+    const tbody = table.querySelector('tbody');
+
+    this.students.forEach(student => {
+      const existing = ratingsByStudent[student.id] || {};
+      const row = document.createElement('tr');
+
+      const nameCell = document.createElement('td');
+      nameCell.textContent = student.name;
+
+      const ratingCell = document.createElement('td');
+      const ratingSelect = document.createElement('select');
+      ratingSelect.className = 'form-select';
+      ratingSelect.innerHTML = `
+        <option value="">Select rating</option>
+        <option value="1">1 - Poor</option>
+        <option value="2">2 - Fair</option>
+        <option value="3">3 - Good</option>
+        <option value="4">4 - Very Good</option>
+        <option value="5">5 - Excellent</option>
+      `;
+      ratingSelect.value = existing.rating ? String(existing.rating) : '';
+      ratingCell.appendChild(ratingSelect);
+
+      const recommendationCell = document.createElement('td');
+      const recommendationInput = document.createElement('textarea');
+      recommendationInput.className = 'form-input';
+      recommendationInput.rows = 2;
+      recommendationInput.placeholder = 'Add instructor recommendation';
+      recommendationInput.value = existing.recommendation || '';
+      recommendationCell.appendChild(recommendationInput);
+
+      const actionsCell = document.createElement('td');
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary btn-small';
+      saveBtn.textContent = existing.rating ? 'Update' : 'Save';
+      saveBtn.addEventListener('click', async () => {
+        const rating = Number(ratingSelect.value);
+        if (!rating) {
+          showNotification('Select a rating before saving', 'warning');
+          return;
+        }
+
+        saveBtn.disabled = true;
+        try {
+          await savePerformanceRating({
+            classId: this.assignedClass,
+            studentId: student.id,
+            instructorId: this.currentUser?.uid || 'local-instructor',
+            rating,
+            recommendation: recommendationInput.value || '',
+            studentName: student.name
+          });
+          await this.loadPerformanceRatings();
+          this.renderPerformanceTab();
+          showNotification(`Performance saved for ${student.name}`, 'success');
+        } catch (error) {
+          console.error(error);
+          showNotification('Failed to save performance rating', 'error');
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+      actionsCell.appendChild(saveBtn);
+
+      row.append(nameCell, ratingCell, recommendationCell, actionsCell);
+      tbody.appendChild(row);
+    });
+
+    container.appendChild(table);
   }
 
   /* ---- STATISTICS TAB ---- */
@@ -302,7 +462,22 @@ export class InstructorDashboard {
     clearElement(tab);
 
     await renderAnalyticsTab(tab, [{ id: this.assignedClass, name: this.assignedClassName }], {
-      assignedClassId: this.assignedClass
+      assignedClassId: this.assignedClass,
+      requireAuth: true,
+      isDemoMode: this.isDemoMode,
+      emptyStateMessage: 'Attendance analytics loads only for authenticated instructors assigned to a real class.'
+    });
+  }
+
+  async renderGraduationTab() {
+    const tab = document.getElementById("graduationTab");
+    clearElement(tab);
+
+    await renderGraduationTab(tab, [{ id: this.assignedClass, name: this.assignedClassName }], {
+      assignedClassId: this.assignedClass,
+      requireAuth: true,
+      isDemoMode: this.isDemoMode,
+      emptyStateMessage: 'Graduation readiness loads only for authenticated instructors assigned to a real class.'
     });
   }
 }

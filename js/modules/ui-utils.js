@@ -271,6 +271,50 @@ export function createModal(title, content, buttons = []) {
   return modal;
 }
 
+export function createSkeletonBlock(className = '', lines = 1) {
+  const block = document.createElement('div');
+  block.className = `skeleton-block ${className}`.trim();
+
+  if (lines > 1) {
+    for (let i = 0; i < lines; i += 1) {
+      const line = document.createElement('div');
+      line.className = 'skeleton-line';
+      block.appendChild(line);
+    }
+  }
+
+  return block;
+}
+
+export function createStatsSkeleton(count = 3) {
+  const grid = document.createElement('div');
+  grid.className = 'stats-grid';
+
+  for (let i = 0; i < count; i += 1) {
+    grid.appendChild(createSkeletonBlock('skeleton-stat'));
+  }
+
+  return grid;
+}
+
+export function createTableSkeleton(rows = 4, columns = 4) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'table-skeleton';
+
+  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+    const row = document.createElement('div');
+    row.className = 'table-skeleton-row';
+
+    for (let colIndex = 0; colIndex < columns; colIndex += 1) {
+      row.appendChild(createSkeletonBlock('table-skeleton-cell'));
+    }
+
+    wrapper.appendChild(row);
+  }
+
+  return wrapper;
+}
+
 export function triggerPrint() {
   window.print();
 }

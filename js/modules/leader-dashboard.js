@@ -18,11 +18,14 @@ import {
   createCard,
   createStatCard,
   createSelect,
-  triggerPrint
+  triggerPrint,
+  createStatsSkeleton,
+  createTableSkeleton
 } from './ui-utils.js';
 
 // BUG FIX (refactor): shared analytics rendering
 import { renderAnalyticsTab } from './analytics-utils.js';
+import { renderGraduationTab } from './graduation-utils.js';
 
 export class LeaderDashboard {
 
@@ -30,6 +33,8 @@ export class LeaderDashboard {
     this.currentUser = null;
     this.classes = [];
     this.quoteIntervalRef = { current: null };
+    this.isDemoMode = false;
+    this.isLoading = true;
     this.currentTab = 'overview';
     this.eventListenersInitialized = false;
   }
@@ -39,14 +44,19 @@ export class LeaderDashboard {
       (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     if (isLocal) {
+      this.isDemoMode = true;
       this.currentUser = AuthService.getCurrentUser();
+      this.renderDashboard();
+      this.attachFreshEventListeners();
       try {
         await this.loadClasses();
       } catch (error) {
         console.warn('Leader local-mode data load failed:', error);
+      } finally {
+        this.isLoading = false;
+        this.renderDashboard();
+        this.attachFreshEventListeners();
       }
-      this.renderDashboard();
-      this.setupEventListeners();
       return;
     }
 
@@ -61,11 +71,22 @@ export class LeaderDashboard {
       if (!allowed) return;
 
       this.currentUser = user;
-
-      await this.loadClasses();
+      this.isLoading = true;
       this.renderDashboard();
-      this.setupEventListeners();
+      this.attachFreshEventListeners();
+      try {
+        await this.loadClasses();
+      } finally {
+        this.isLoading = false;
+        this.renderDashboard();
+        this.attachFreshEventListeners();
+      }
     });
+  }
+
+  attachFreshEventListeners() {
+    this.eventListenersInitialized = false;
+    this.setupEventListeners();
   }
 
   async loadClasses() {
@@ -96,7 +117,7 @@ export class LeaderDashboard {
     const navLinks = document.querySelectorAll('.nav-link');
     const mapHashToTab = (hash) => {
       if (!hash) return '';
-      const map = { overview: 'overview', reports: 'reports', analytics: 'analytics' };
+      const map = { overview: 'overview', reports: 'reports', analytics: 'analytics', graduation: 'graduation' };
       return map[hash.replace('#', '')] || hash.replace('#', '');
     };
 
@@ -148,6 +169,7 @@ export class LeaderDashboard {
 
     if (tabName === 'reports')   this.renderReportsTab();
     if (tabName === 'analytics') this.renderAnalyticsTab();
+    if (tabName === 'graduation') this.renderGraduationTab();
   }
 
   renderDashboard() {
@@ -173,6 +195,7 @@ export class LeaderDashboard {
       <button class="tab-btn active" data-tab="overview">Overview</button>
       <button class="tab-btn" data-tab="reports">Reports</button>
       <button class="tab-btn" data-tab="analytics">Analytics</button>
+      <button class="tab-btn" data-tab="graduation">Graduation</button>
     `;
     mainContent.appendChild(tabNav);
 
@@ -181,6 +204,7 @@ export class LeaderDashboard {
       <div id="overviewTab"   class="tab-content"></div>
       <div id="reportsTab"    class="tab-content hidden"></div>
       <div id="analyticsTab"  class="tab-content hidden"></div>
+      <div id="graduationTab" class="tab-content hidden"></div>
     `;
     mainContent.appendChild(tabContent);
 
@@ -190,6 +214,11 @@ export class LeaderDashboard {
   async renderOverviewTab() {
     const tab = document.getElementById('overviewTab');
     clearElement(tab);
+
+    if (this.isLoading) {
+      tab.appendChild(createStatsSkeleton(3));
+      return;
+    }
 
     const statsRow = document.createElement('div');
     statsRow.className = 'flex gap-lg flex-wrap';
@@ -238,6 +267,11 @@ export class LeaderDashboard {
     const reportsContainer = document.createElement('div');
     reportsContainer.id = 'reportsContainer';
     tab.appendChild(reportsContainer);
+
+    if (this.isLoading) {
+      reportsContainer.appendChild(createTableSkeleton(5, 2));
+      return;
+    }
 
     classSelect.addEventListener('change', async (e) => {
       const classId = e.target.value;
@@ -302,6 +336,20 @@ export class LeaderDashboard {
   // BUG FIX (refactor): delegates to shared renderAnalyticsTab from analytics-utils.js
   async renderAnalyticsTab() {
     const tab = document.getElementById('analyticsTab');
-    await renderAnalyticsTab(tab, this.classes, { quoteIntervalRef: this.quoteIntervalRef });
+    await renderAnalyticsTab(tab, this.classes, {
+      quoteIntervalRef: this.quoteIntervalRef,
+      requireAuth: true,
+      isDemoMode: this.isDemoMode,
+      emptyStateMessage: 'Attendance analytics is available after signing in as an authenticated leader.'
+    });
+  }
+
+  async renderGraduationTab() {
+    const tab = document.getElementById('graduationTab');
+    await renderGraduationTab(tab, this.classes, {
+      requireAuth: true,
+      isDemoMode: this.isDemoMode,
+      emptyStateMessage: 'Graduation readiness is available after signing in as an authenticated leader.'
+    });
   }
 }

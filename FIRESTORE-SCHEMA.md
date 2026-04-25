@@ -40,11 +40,22 @@ This document describes the recommended Firestore collections, documents, and fi
     - `status`: string — `present` or `absent`
     - `createdAt`: timestamp
 
+- `performanceRatings` (document id = `${classId}__${studentId}__${instructorId}`)
+  - Fields:
+    - `classId`: string
+    - `studentId`: string
+    - `instructorId`: string (UID of the instructor rating the student)
+    - `studentName`: string
+    - `rating`: number — integer from `1` to `5`
+    - `recommendation`: string
+    - `updatedAt`: timestamp
+
 ## Index Recommendations
 
 - Index `students` by `classId` for efficient class lookups.  
 - Index `attendanceRecords` by `sessionId` for session lookups.  
 - Optional: composite index for `attendanceSessions` on (`classId`, `date`) to query sessions in date order.
+- Index `performanceRatings` by `classId` for class graduation/performance views.
 
 ## Notes on field names used by the code
 
@@ -59,5 +70,6 @@ This document describes the recommended Firestore collections, documents, and fi
 
 - Use Firestore server timestamps for all `createdAt` fields (i.e. `serverTimestamp()`) to ensure consistent types and ordering across clients and server scripts.
 - `attendanceSessions` documents do not embed attendance records in this schema; `attendanceRecords` is a separate collection keyed by `sessionId` so code should query `attendanceRecords` for session details.
+- `performanceRatings` stores the latest instructor feedback per student for a class and can be combined with attendance percentage to derive graduation readiness metrics in the UI.
 - Standardize on `assignedClassId` for instructor assignment. If you have existing user documents with `assignedClass`, run a one-time migration script to copy `assignedClass` -> `assignedClassId` and confirm tests before removing the legacy field.
 - Update any docs, UI labels, and security rules to reference `assignedClassId` to avoid runtime mismatches.

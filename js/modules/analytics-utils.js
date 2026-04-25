@@ -7,6 +7,7 @@ import {
   getGatheringPlaceStats,
   getNextClassDates
 } from './firestore.js';
+import { auth } from '../firebase-config.js';
 
 import {
   clearElement,
@@ -111,11 +112,30 @@ export function displayRandomQuote(container) {
  *                                              to store/clear the quote rotation interval.
  */
 export async function renderAnalyticsTab(tab, classes, opts = {}) {
-  const { assignedClassId = null, quoteIntervalRef = {} } = opts;
+  const {
+    assignedClassId = null,
+    quoteIntervalRef = {},
+    requireAuth = false,
+    isDemoMode = false,
+    emptyStateMessage = 'Sign in to view analytics.'
+  } = opts;
 
   clearElement(tab);
   const skeleton = createAnalyticsSkeleton();
   tab.appendChild(skeleton);
+
+  const isAuthenticated = Boolean(auth?.currentUser);
+
+  if ((requireAuth && !isAuthenticated) || isDemoMode) {
+    clearElement(tab);
+    tab.innerHTML = `
+      <div class="card">
+        <div class="card-header">Attendance Analytics</div>
+        <div class="card-body">${emptyStateMessage}</div>
+      </div>
+    `;
+    return;
+  }
 
   const mainContainer = document.createElement('div');
   mainContainer.className = 'analytics-container';

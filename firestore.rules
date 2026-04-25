@@ -50,6 +50,11 @@ service cloud.firestore {
         sessionData.classId == getUserAssignedClass(request.auth.uid);
     }
 
+    function instructorOwnsClass(classId) {
+      return isInstructor() &&
+        classId == getUserAssignedClass(request.auth.uid);
+    }
+
     // ====================
     // USERS COLLECTION
     // ====================
@@ -130,6 +135,33 @@ service cloud.firestore {
 
       allow delete: if isInstructor() &&
         instructorOwnsSession(sessionDoc(resource.data.sessionId));
+    }
+
+    // ====================
+    // PERFORMANCE RATINGS COLLECTION
+    // ====================
+    match /performanceRatings/{recordId} {
+      allow read: if isAdmin() || isLeader() || (
+        isInstructor() &&
+        resource.data.classId == getUserAssignedClass(request.auth.uid)
+      );
+
+      allow create, update, delete: if isAdmin();
+
+      allow create: if instructorOwnsClass(request.resource.data.classId) &&
+        request.resource.data.instructorId == request.auth.uid &&
+        request.resource.data.rating is number &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5;
+
+      allow update: if resource.data.classId == getUserAssignedClass(request.auth.uid) &&
+        resource.data.instructorId == request.auth.uid &&
+        request.resource.data.classId == resource.data.classId &&
+        request.resource.data.studentId == resource.data.studentId &&
+        request.resource.data.instructorId == resource.data.instructorId &&
+        request.resource.data.rating is number &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5;
     }
 
     // Deny all other access by default

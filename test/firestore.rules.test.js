@@ -101,6 +101,40 @@ async function run() {
       throw e;
     }
 
+    console.log('Attempt: instructor save performance rating');
+    try {
+      await assertSucceeds(setDoc(doc(instructorDb, 'performanceRatings', 'class1__student1__instructor1'), {
+        classId: 'class1',
+        studentId: 'student1',
+        instructorId: 'instructor1',
+        studentName: 'Student One',
+        rating: 4,
+        recommendation: 'Consistent learner',
+        updatedAt: Timestamp.now()
+      }));
+      console.log('OK: instructor saved performance rating');
+    } catch (e) {
+      console.error('ERROR: instructor save performance rating failed', e);
+      throw e;
+    }
+
+    console.log('Attempt: instructor save invalid performance rating (should fail)');
+    try {
+      await assertFails(setDoc(doc(instructorDb, 'performanceRatings', 'class1__student2__instructor1'), {
+        classId: 'class1',
+        studentId: 'student2',
+        instructorId: 'instructor1',
+        studentName: 'Student Two',
+        rating: 6,
+        recommendation: 'Out of bounds',
+        updatedAt: Timestamp.now()
+      }));
+      console.log('OK: invalid performance rating rejected');
+    } catch (e) {
+      console.error('ERROR: invalid performance rating test failed', e);
+      throw e;
+    }
+
     console.log('All rule tests completed successfully.');
 
   } catch (err) {
