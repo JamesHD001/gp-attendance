@@ -184,7 +184,7 @@ export async function getStudentsByClass(classId) {
 }
 
 
-export async function addStudent(name, classId) {
+export async function addStudent(name, classId, email = null) {
 
   const studentsRef = collection(db, "students");
 
@@ -193,6 +193,10 @@ export async function addStudent(name, classId) {
     classId,
     createdAt: serverTimestamp()
   };
+
+  if (email) {
+    studentData.email = email;
+  }
 
   const docRef = await addDoc(studentsRef, studentData);
 
@@ -392,10 +396,12 @@ export async function initializeClasses() {
   const defaultClasses = [
     "ICT",
     "Barbing",
+    "Bag Making",
     "Catering",
     "Fashion/Tailoring",
     "Makeup/Facial Stylists",
     "Hair Making/Dressing",
+    "Self-Reliance",
     "Temple & Family History",
     "Mission Preparation",
     "BYU Pathway",

@@ -44,16 +44,18 @@ A production-ready, fully client-side attendance management system for LDS Churc
 
 1. ICT
 2. Barbing
-3. Catering
-4. Fashion/Tailoring
-5. Makeup/Facial Stylists
-6. Hair Making/Dressing
-7. Temple & Family History
-8. Mission Preparation
-9. BYU Pathway
-10. Guest
-11. Institute of Religion
-12. Shoe Making
+3. Bag Making
+4. Catering
+5. Fashion/Tailoring
+6. Makeup/Facial Stylists
+7. Hair Making/Dressing
+8. Self-Reliance
+9. Temple & Family History
+10. Mission Preparation
+11. BYU Pathway
+12. Guest
+13. Institute of Religion
+14. Shoe Making
 
 ## 🔧 Tech Stack
 
@@ -193,7 +195,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if request.auth != null && (
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClass == 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassId == 
           get(/databases/$(database)/documents/students/$(studentId)).data.classId
       );
     }
@@ -243,7 +245,7 @@ UID: [instructor user ID]
 name: "Instructor Name"
 email: "instructor@example.com"
 role: "instructor"
-assignedClass: "[classId of first class]"
+assignedClassId: "[classId of first class]"
 ```
 
 For Leader:
@@ -300,7 +302,7 @@ Your site will be live at: `https://YOUR_USERNAME.github.io/gp-attendance/`
   name: string
   email: string
   role: "admin" | "instructor" | "leader"
-  assignedClass: string (only for instructors)
+  assignedClassId: string (only for instructors)
   createdAt: timestamp
 }
 ```
@@ -324,7 +326,8 @@ Your site will be live at: `https://YOUR_USERNAME.github.io/gp-attendance/`
   studentId (document ID)
   name: string
   classId: string
-  dateJoined: timestamp
+  email: string (optional)
+  createdAt: timestamp
 }
 ```
 
@@ -381,7 +384,7 @@ Your site will be live at: `https://YOUR_USERNAME.github.io/gp-attendance/`
 ### "No class assigned to you yet"
 
 - Admin must assign an instructor to a class
-- Edit the instructor's user document and set `assignedClass` to a valid classId
+- Edit the instructor's user document and set `assignedClassId` to a valid classId
 
 ### Users can't see data
 

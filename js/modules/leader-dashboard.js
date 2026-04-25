@@ -35,6 +35,21 @@ export class LeaderDashboard {
   }
 
   async init() {
+    const isLocal = typeof window !== 'undefined' &&
+      (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+
+    if (isLocal) {
+      this.currentUser = AuthService.getCurrentUser();
+      try {
+        await this.loadClasses();
+      } catch (error) {
+        console.warn('Leader local-mode data load failed:', error);
+      }
+      this.renderDashboard();
+      this.setupEventListeners();
+      return;
+    }
+
     AuthService.onAuthStateChanged(async (user) => {
 
       if (!user) {
@@ -290,8 +305,3 @@ export class LeaderDashboard {
     await renderAnalyticsTab(tab, this.classes, { quoteIntervalRef: this.quoteIntervalRef });
   }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  const dashboard = new LeaderDashboard();
-  dashboard.init();
-});

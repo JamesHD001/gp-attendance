@@ -14,8 +14,9 @@ import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs
 import {
   clearElement, showNotification, createTable, createCard,
   createStatCard, createButton, createInput, createSelect,
-  createModal, triggerPrint, renderAnalyticsSection
+  createModal
 } from './ui-utils.js';
+import { renderAnalyticsTab } from './analytics-utils.js';
 
 export class AdminDashboard {
   constructor() {
@@ -28,6 +29,23 @@ export class AdminDashboard {
   }
 
   async init() {
+    const isLocal = typeof window !== 'undefined' &&
+      (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+
+    if (isLocal) {
+      this.currentUser = AuthService.getCurrentUser();
+      try {
+        await this.loadClasses();
+        await this.loadUsers();
+        await this.loadStudents();
+      } catch (error) {
+        console.warn('Admin local-mode data load failed:', error);
+      }
+      this.renderDashboard();
+      this.setupEventListeners();
+      return;
+    }
+
     // FIX Bug 2: ONE listener only — stray outer AuthService.onAuthStateChanged
     // that existed at the bottom of the original file has been removed.
     AuthService.onAuthStateChanged(async (user) => {
@@ -255,12 +273,8 @@ export class AdminDashboard {
   }
 
   async renderAnalyticsTab() {
-    const tab = document.getElementById('analyticsTab'); clearElement(tab);
-    const printBtn = createButton('Print Report', () => triggerPrint());
-    printBtn.className = 'btn btn-secondary mb-lg';
-    tab.appendChild(printBtn);
-    // FIX Bugs 12/13: shared renderer, no duplication
-    await renderAnalyticsSection(tab, { classes: this.classes, role: 'admin' });
+    const tab = document.getElementById('analyticsTab');
+    await renderAnalyticsTab(tab, this.classes);
   }
 
   showAddUserModal() {

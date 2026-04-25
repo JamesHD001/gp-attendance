@@ -5,8 +5,8 @@
   "scripts": {
     "gen-config": "node scripts/generate-firebase-config.js",
     "dedupe-classes": "node scripts/dedupe-classes.js",
-    "test:rules": "node test/firestore.rules.test.js",
-    "test:ui": "node test/ui.navigation.test.js"
+    "test:rules": "node scripts/run-rules-test.js",
+    "test:ui": "node scripts/run-ui-test.js"
   },
   "engines": {
     "node": ">=14"

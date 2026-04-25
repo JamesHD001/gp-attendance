@@ -188,7 +188,7 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
         ...classes.map(c => ({ label: c.name, value: c.id }))
       ];
 
-  const classSelect  = createSelect(classOptions, 'analyticsClassSelect');
+  const classSelect  = createSelect(classOptions, 'analyticsClassSelect', assignedClassId || '');
   const periodSelect = createSelect(
     [
       { label: 'All Time', value: 'all'      },
@@ -261,6 +261,9 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
 
   classSelect.addEventListener('change',  updateClassStats);
   periodSelect.addEventListener('change', updateClassStats);
+  if (assignedClassId) {
+    await updateClassStats();
+  }
   mainContainer.appendChild(classStatsSection);
 
   // ── 4. Upcoming schedule ──────────────────────────────────────────────────

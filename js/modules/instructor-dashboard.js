@@ -4,18 +4,20 @@ import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-
 import {
   getStudentsByClass, addStudent, deleteStudent,
   getSessionsByClass, createSession, deleteSession,
-  getAttendanceBySession
+  getAttendanceBySession, getClassById
 } from './firestore.js';
 import {
   formatDate, createTable, createButton,
-  clearElement, showNotification, renderAnalyticsSection
+  clearElement, showNotification
 } from './ui-utils.js';
+import { renderAnalyticsTab } from './analytics-utils.js';
 
 export class InstructorDashboard {
   constructor() {
     this.currentUser = null;
     this.userData = null;
     this.assignedClass = null;
+    this.assignedClassName = '';
     this.students = [];
     this.sessions = [];
     this.currentTab = 'students';
@@ -23,6 +25,25 @@ export class InstructorDashboard {
   }
 
   async init() {
+    const isLocal = typeof window !== 'undefined' &&
+      (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+
+    if (isLocal) {
+      this.currentUser = AuthService.getCurrentUser();
+      this.userData = { name: 'Local Instructor', assignedClassId: 'local-class' };
+      this.assignedClass = 'local-class';
+      this.assignedClassName = 'Demo Class';
+      try {
+        await this.loadStudents();
+        await this.loadSessions();
+      } catch (error) {
+        console.warn('Instructor local-mode data load failed:', error);
+      }
+      this.renderDashboard();
+      this.attachEventListeners();
+      return;
+    }
+
     AuthService.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = "../index.html"; return; }
       const allowed = await AuthService.requireRole("instructor");
@@ -38,14 +59,30 @@ export class InstructorDashboard {
 
   async loadInstructorData() {
     const userDoc = await getDoc(doc(db, "users", this.currentUser.uid));
-    this.userData = userDoc.data();
+    this.userData = userDoc.data() || {};
     // FIX Bug 5: prefer assignedClassId, fall back for legacy docs
     this.assignedClass = this.userData.assignedClassId || this.userData.assignedClass || null;
+    if (this.assignedClass) {
+      const classDoc = await getClassById(this.assignedClass);
+      this.assignedClassName = classDoc?.name || this.assignedClass;
+    } else {
+      this.assignedClassName = 'Unassigned';
+    }
   }
 
-  async loadStudents() { this.students = await getStudentsByClass(this.assignedClass); }
+  async loadStudents() {
+    if (!this.assignedClass) {
+      this.students = [];
+      return;
+    }
+    this.students = await getStudentsByClass(this.assignedClass);
+  }
 
   async loadSessions() {
+    if (!this.assignedClass) {
+      this.sessions = [];
+      return;
+    }
     this.sessions = await getSessionsByClass(this.assignedClass);
     for (const session of this.sessions) {
       try { session.records = await getAttendanceBySession(session.id); }
@@ -60,7 +97,7 @@ export class InstructorDashboard {
       <header class="dashboard-header">
         <div>
           <h1>Instructor Dashboard</h1>
-          <p>${this.userData.name} — ${String(this.assignedClass || '').toUpperCase()} Class</p>
+          <p>${this.userData.name || 'Instructor'} — ${this.assignedClassName} Class</p>
         </div>
         <button id="logoutBtn" class="btn btn-secondary">Logout</button>
       </header>
@@ -137,7 +174,8 @@ export class InstructorDashboard {
       if (!name) { showNotification('Student name is required', 'warning'); return; }
       addBtn.disabled = true;
       try {
-        await addStudent(name, this.assignedClass);
+        const email = (emailInput.value || '').trim();
+        await addStudent(name, this.assignedClass, email || null);
         nameInput.value = ''; emailInput.value = '';
         await this.loadStudents();
         this.renderStudentsTab();
@@ -263,17 +301,8 @@ export class InstructorDashboard {
     const tab = document.getElementById("statsTab");
     clearElement(tab);
 
-    const printBtn = createButton('Print Report', () => window.print());
-    printBtn.className = 'btn btn-secondary mb-lg';
-    tab.appendChild(printBtn);
-
-    // FIX Bug 4: this.assignedClass is a string ID, NOT an object.
-    // The original code wrongly used `this.assignedClass?.id` which always gave undefined.
-    // FIX Bugs 12/13: shared analytics renderer — no more duplicated code
-    await renderAnalyticsSection(tab, {
-      classes: [{ id: this.assignedClass, name: 'Your Class' }],
-      role: 'instructor',
-      defaultClassId: this.assignedClass
+    await renderAnalyticsTab(tab, [{ id: this.assignedClass, name: this.assignedClassName }], {
+      assignedClassId: this.assignedClass
     });
   }
 }

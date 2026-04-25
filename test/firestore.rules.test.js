@@ -40,7 +40,7 @@ async function run() {
       });
     });
 
-    const adminContext = testEnv.authenticatedContext({ uid: 'adminUid' });
+    const adminContext = testEnv.authenticatedContext('adminUid');
     const adminDb = adminContext.firestore();
 
     console.log('Attempt: admin create user');
@@ -52,7 +52,7 @@ async function run() {
       throw e;
     }
 
-    const instructorContext = testEnv.authenticatedContext({ uid: 'instructor1' });
+    const instructorContext = testEnv.authenticatedContext('instructor1');
     const instructorDb = instructorContext.firestore();
 
     const sessionData = { classId: 'class1', date: Timestamp.now(), createdBy: 'instructor1', createdAt: Timestamp.now() };

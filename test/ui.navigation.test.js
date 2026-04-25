@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer-core');
-const os = require('os');
 const fs = require('fs');
+const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
 
 function findChromeExecutable() {
   const candidates = [
@@ -30,15 +30,7 @@ async function testPage(url) {
   const page = await browser.newPage();
   page.setDefaultNavigationTimeout(15000);
   page.on('console', msg => console.log('PAGE LOG:', msg.text()));
-  page.on('requestfailed', req => {
-    const f = req.failure && req.failure();
-    console.log('REQUEST FAILED:', req.url(), f ? f.errorText : 'unknown');
-  });
   page.on('pageerror', err => console.log('PAGE ERROR:', err && err.toString()));
-  page.on('requestfailed', req => {
-    const f = req.failure && req.failure();
-    console.log('REQUEST FAILED:', req.url(), f ? f.errorText : 'unknown');
-  });
 
   await page.goto(url, { waitUntil: 'networkidle2' });
 
@@ -99,9 +91,9 @@ async function testPage(url) {
 
 (async () => {
   const pages = [
-    'http://localhost:3001/pages/admin-dashboard.html',
-    'http://localhost:3001/pages/instructor-dashboard.html',
-    'http://localhost:3001/pages/leader-dashboard.html'
+    `${baseUrl}/pages/admin-dashboard.html`,
+    `${baseUrl}/pages/instructor-dashboard.html`,
+    `${baseUrl}/pages/leader-dashboard.html`
   ];
 
   let allOk = true;
