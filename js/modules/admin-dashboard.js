@@ -103,7 +103,7 @@ export class AdminDashboard {
     this.eventListenersInitialized = true;
 
     document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-      await AuthService.logout(); window.location.href = '../index.html';
+      await AuthService.logout();
     });
 
     document.querySelectorAll('.tab-btn').forEach(btn =>

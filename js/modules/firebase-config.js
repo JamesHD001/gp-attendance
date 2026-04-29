@@ -4,6 +4,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-app.js';
 import { 
   getAuth, 
+  setPersistence,
+  browserSessionPersistence,
   signOut as firebaseSignOut 
 } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js';
 
@@ -25,13 +27,16 @@ const firebaseConfig = {
 let app;
 let auth;
 let db;
+let authPersistenceReady = Promise.resolve();
 
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
+  authPersistenceReady = setPersistence(auth, browserSessionPersistence);
   db = getFirestore(app);
 } catch (error) {
   console.error('Firebase initialization error:', error);
+  authPersistenceReady = Promise.reject(error);
 }
 
-export { app, auth, db, firebaseSignOut, firebaseConfig };
+export { app, auth, db, firebaseSignOut, firebaseConfig, authPersistenceReady };

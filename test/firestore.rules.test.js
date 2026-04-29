@@ -66,6 +66,36 @@ async function run() {
       throw e;
     }
 
+    console.log('Attempt: instructor manage own session document');
+    try {
+      await assertSucceeds(setDoc(doc(instructorDb, 'userSessions', 'instructor1'), {
+        uid: 'instructor1',
+        status: 'active',
+        lastActivityAt: Timestamp.now(),
+        expiresAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      }));
+      console.log('OK: instructor can manage own user session');
+    } catch (e) {
+      console.error('ERROR: instructor own session write failed', e);
+      throw e;
+    }
+
+    console.log('Attempt: instructor modify another user session (should fail)');
+    try {
+      await assertFails(setDoc(doc(instructorDb, 'userSessions', 'adminUid'), {
+        uid: 'adminUid',
+        status: 'active',
+        lastActivityAt: Timestamp.now(),
+        expiresAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
+      }));
+      console.log('OK: prevented modifying another user session');
+    } catch (e) {
+      console.error('ERROR: other user session protection failed', e);
+      throw e;
+    }
+
     console.log('Attempt: instructor create session for other class (should fail)');
     try {
       await assertFails(addDoc(collection(instructorDb, 'attendanceSessions'), { classId: 'other', date: Timestamp.now(), createdBy: 'instructor1' }));

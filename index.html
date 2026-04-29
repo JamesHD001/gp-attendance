@@ -43,10 +43,19 @@
             const passwordInput = document.getElementById('password');
             const loginBtn = document.getElementById('loginBtn');
             const loginError = document.getElementById('loginError');
+
+            AuthService.showReasonFromUrl();
             
             // Redirect whenever an authenticated user is observed
             AuthService.onAuthStateChanged(async (user) => {
                 if (user) {
+                    const sessionIsActive = await AuthService.ensureSessionActive(user);
+
+                    if (!sessionIsActive) {
+                        await AuthService.logout({ reason: 'session-expired', skipSessionCleanup: true });
+                        return;
+                    }
+
                     await AuthService.redirectBasedOnRole(user);
                 }
             });

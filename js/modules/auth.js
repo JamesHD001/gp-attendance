@@ -1,33 +1,244 @@
 // Authentication Module
-// Handles login, logout, and authentication state
+// Handles login, logout, session timeout, and authentication state
 
-import { auth, firebaseSignOut } from '../firebase-config.js';
+import { auth, db, firebaseSignOut, authPersistenceReady } from '../firebase-config.js';
 
 import {
   signInWithEmailAndPassword,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js";
 
+import {
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  Timestamp
+} from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
+
 import { getUserRole } from './firestore.js';
+import { showNotification } from './ui-utils.js';
+
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+const SESSION_WARNING_MS = 60 * 1000;
+const SESSION_SYNC_THROTTLE_MS = 60 * 1000;
+const SESSION_ACTIVITY_EVENTS = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
 
 export class AuthService {
 
-  // Login user
+  static isLocalEnvironment() {
+    return typeof window !== 'undefined' &&
+      (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+  }
+
+  static async waitForAuthReady() {
+    await authPersistenceReady;
+  }
+
+  static getSessionRef(userId) {
+    return doc(db, 'userSessions', userId);
+  }
+
+  static buildSessionPayload(userId) {
+    const now = Date.now();
+    const lastActivityAt = Timestamp.fromMillis(now);
+
+    return {
+      uid: userId,
+      status: 'active',
+      lastActivityAt,
+      expiresAt: Timestamp.fromMillis(now + SESSION_TIMEOUT_MS),
+      updatedAt: lastActivityAt
+    };
+  }
+
+  static async touchSession(userId, options = {}) {
+    const { force = false } = options;
+    const now = Date.now();
+
+    if (!force && now - AuthService.lastSessionSyncAt < SESSION_SYNC_THROTTLE_MS) {
+      return;
+    }
+
+    AuthService.lastSessionSyncAt = now;
+    await setDoc(AuthService.getSessionRef(userId), AuthService.buildSessionPayload(userId), { merge: true });
+  }
+
+  static async startSession(user) {
+    if (!user || AuthService.isLocalEnvironment()) return;
+    await AuthService.touchSession(user.uid, { force: true });
+  }
+
+  static async ensureSessionActive(user) {
+    if (!user || AuthService.isLocalEnvironment()) return true;
+
+    const sessionSnapshot = await getDoc(AuthService.getSessionRef(user.uid));
+
+    if (!sessionSnapshot.exists()) {
+      if (AuthService.isHydratingSession && auth.currentUser?.uid === user.uid) {
+        await AuthService.startSession(user);
+        return true;
+      }
+      return false;
+    }
+
+    const sessionData = sessionSnapshot.data() || {};
+    const expiresAtMs = sessionData.expiresAt?.toMillis?.() || 0;
+
+    if (sessionData.status !== 'active' || !expiresAtMs || expiresAtMs <= Date.now()) {
+      await deleteDoc(AuthService.getSessionRef(user.uid)).catch(() => {});
+      return false;
+    }
+
+    return true;
+  }
+
+  static resetSessionTimers(expiresAtMs) {
+    if (AuthService.sessionWarningTimer) {
+      clearTimeout(AuthService.sessionWarningTimer);
+      AuthService.sessionWarningTimer = null;
+    }
+
+    if (AuthService.sessionExpiryTimer) {
+      clearTimeout(AuthService.sessionExpiryTimer);
+      AuthService.sessionExpiryTimer = null;
+    }
+
+    const msUntilExpiry = expiresAtMs - Date.now();
+
+    if (msUntilExpiry <= 0) {
+      void AuthService.handleSessionExpiration();
+      return;
+    }
+
+    if (msUntilExpiry > SESSION_WARNING_MS) {
+      AuthService.sessionWarningTimer = window.setTimeout(() => {
+        showNotification('Your session will expire in 1 minute due to inactivity.', 'warning');
+      }, msUntilExpiry - SESSION_WARNING_MS);
+    }
+
+    AuthService.sessionExpiryTimer = window.setTimeout(() => {
+      void AuthService.handleSessionExpiration();
+    }, msUntilExpiry);
+  }
+
+  static attachActivityListeners(userId) {
+    AuthService.activityHandler = () => {
+      AuthService.resetSessionTimers(Date.now() + SESSION_TIMEOUT_MS);
+      void AuthService.touchSession(userId).catch((error) => {
+        console.error('Failed to sync session activity:', error);
+      });
+    };
+
+    AuthService.visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && AuthService.activityHandler) {
+        AuthService.activityHandler();
+      }
+    };
+
+    for (const eventName of SESSION_ACTIVITY_EVENTS) {
+      window.addEventListener(eventName, AuthService.activityHandler, { passive: true });
+    }
+
+    document.addEventListener('visibilitychange', AuthService.visibilityHandler);
+  }
+
+  static stopSessionMonitoring() {
+    if (AuthService.sessionUnsubscribe) {
+      AuthService.sessionUnsubscribe();
+      AuthService.sessionUnsubscribe = null;
+    }
+
+    if (AuthService.sessionWarningTimer) {
+      clearTimeout(AuthService.sessionWarningTimer);
+      AuthService.sessionWarningTimer = null;
+    }
+
+    if (AuthService.sessionExpiryTimer) {
+      clearTimeout(AuthService.sessionExpiryTimer);
+      AuthService.sessionExpiryTimer = null;
+    }
+
+    if (AuthService.activityHandler) {
+      for (const eventName of SESSION_ACTIVITY_EVENTS) {
+        window.removeEventListener(eventName, AuthService.activityHandler);
+      }
+      AuthService.activityHandler = null;
+    }
+
+    if (AuthService.visibilityHandler) {
+      document.removeEventListener('visibilitychange', AuthService.visibilityHandler);
+      AuthService.visibilityHandler = null;
+    }
+
+    AuthService.activeSessionUid = null;
+    AuthService.lastSessionSyncAt = 0;
+  }
+
+  static async beginSessionMonitoring(user) {
+    if (!user || AuthService.isLocalEnvironment()) return;
+
+    if (AuthService.activeSessionUid === user.uid && AuthService.sessionUnsubscribe) {
+      return;
+    }
+
+    AuthService.stopSessionMonitoring();
+    AuthService.activeSessionUid = user.uid;
+
+    await AuthService.touchSession(user.uid, { force: true });
+
+    AuthService.sessionUnsubscribe = onSnapshot(
+      AuthService.getSessionRef(user.uid),
+      (sessionSnapshot) => {
+        if (!sessionSnapshot.exists()) {
+          void AuthService.handleSessionExpiration();
+          return;
+        }
+
+        const sessionData = sessionSnapshot.data() || {};
+        const expiresAtMs = sessionData.expiresAt?.toMillis?.() || 0;
+
+        if (sessionData.status !== 'active' || !expiresAtMs || expiresAtMs <= Date.now()) {
+          void AuthService.handleSessionExpiration();
+          return;
+        }
+
+        AuthService.resetSessionTimers(expiresAtMs);
+      },
+      (error) => {
+        console.error('Session listener error:', error);
+      }
+    );
+
+    AuthService.attachActivityListeners(user.uid);
+  }
+
+  static async handleSessionExpiration() {
+    if (AuthService.isLoggingOut) return;
+    await AuthService.logout({ reason: 'session-expired' });
+  }
+
   static async login(email, password) {
     try {
+      await AuthService.waitForAuthReady();
+      AuthService.isHydratingSession = true;
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      await AuthService.startSession(userCredential.user);
       return userCredential.user;
     } catch (error) {
       console.error("Login Error:", error);
       throw new Error("Invalid email or password.");
+    } finally {
+      AuthService.isHydratingSession = false;
     }
   }
 
   // Ensure the logged-in user has the correct role for the page
   static async requireRole(expectedRole) {
-    const isLocal = (typeof window !== 'undefined') && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    await AuthService.waitForAuthReady();
 
-    if (isLocal) return true;
+    if (AuthService.isLocalEnvironment()) return true;
 
     const user = auth.currentUser;
 
@@ -37,17 +248,22 @@ export class AuthService {
     }
   
     try {
-  
+      const sessionIsActive = await AuthService.ensureSessionActive(user);
+
+      if (!sessionIsActive) {
+        await AuthService.logout({ reason: 'session-expired', skipSessionCleanup: true });
+        return false;
+      }
+
       const role = await getUserRole(user.uid);
   
       if (role !== expectedRole) {
-  
-        // Redirect to correct dashboard
+        AuthService.stopSessionMonitoring();
         await AuthService.redirectBasedOnRole(user);
         return false;
-  
       }
-  
+
+      await AuthService.beginSessionMonitoring(user);
       return true;
   
     } catch (error) {
@@ -59,16 +275,33 @@ export class AuthService {
     }
   
   }
-  static async logout() {
+
+  static async logout(options = {}) {
+    const { reason = null, skipSessionCleanup = false } = options;
+
     try {
-      const isLocal = (typeof window !== 'undefined') && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+      const isLocal = AuthService.isLocalEnvironment();
+      const sessionUserId = auth.currentUser?.uid || AuthService.activeSessionUid;
+
+      AuthService.isLoggingOut = true;
+      AuthService.stopSessionMonitoring();
+
       if (isLocal) {
-        window.location.href = AuthService.getIndexPath();
+        window.location.href = AuthService.buildIndexUrl(reason);
         return;
       }
 
-      await firebaseSignOut(auth);
-      window.location.href = AuthService.getIndexPath();
+      if (sessionUserId && !skipSessionCleanup) {
+        await deleteDoc(AuthService.getSessionRef(sessionUserId)).catch((error) => {
+          console.warn('Session cleanup failed:', error);
+        });
+      }
+
+      if (auth.currentUser) {
+        await firebaseSignOut(auth);
+      }
+
+      window.location.href = AuthService.buildIndexUrl(reason);
     } catch (error) {
       console.error("Logout Error:", error);
       throw new Error("Logout failed.");
@@ -81,16 +314,51 @@ export class AuthService {
     return window.location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
   }
 
+  static buildIndexUrl(reason = null) {
+    const indexPath = AuthService.getIndexPath();
+
+    if (!reason) {
+      return indexPath;
+    }
+
+    const params = new URLSearchParams({ reason });
+    return `${indexPath}?${params.toString()}`;
+  }
+
+  static showReasonFromUrl() {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get('reason');
+
+    if (reason === 'session-expired') {
+      showNotification('Your session expired due to inactivity. Please sign in again.', 'warning');
+      params.delete('reason');
+      const nextQuery = params.toString();
+      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+      history.replaceState(null, '', nextUrl);
+    }
+  }
+
   // Get current logged-in user
   static getCurrentUser() {
-    const isLocal = (typeof window !== 'undefined') && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-    if (isLocal) return { uid: 'devUser' };
+    if (AuthService.isLocalEnvironment()) return { uid: 'devUser' };
     return auth.currentUser;
   }
 
   // Listen for authentication changes
   static onAuthStateChanged(callback) {
-    return onAuthStateChanged(auth, callback);
+    let unsubscribe = () => {};
+
+    AuthService.waitForAuthReady()
+      .then(() => {
+        unsubscribe = onAuthStateChanged(auth, callback);
+      })
+      .catch((error) => {
+        console.error('Auth state listener setup failed:', error);
+      });
+
+    return () => unsubscribe();
   }
 
   // Redirect user to the correct dashboard
@@ -152,3 +420,13 @@ export class AuthService {
     }
   }
 }
+
+AuthService.sessionUnsubscribe = null;
+AuthService.sessionWarningTimer = null;
+AuthService.sessionExpiryTimer = null;
+AuthService.activityHandler = null;
+AuthService.visibilityHandler = null;
+AuthService.activeSessionUid = null;
+AuthService.lastSessionSyncAt = 0;
+AuthService.isHydratingSession = false;
+AuthService.isLoggingOut = false;

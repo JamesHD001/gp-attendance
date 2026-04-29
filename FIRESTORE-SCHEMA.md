@@ -19,6 +19,14 @@ This document describes the recommended Firestore collections, documents, and fi
     - `isLocked`: boolean
     - `createdAt`: timestamp
 
+- `userSessions` (document id = Firebase Auth UID)
+  - Fields:
+    - `uid`: string
+    - `status`: string — currently `active`
+    - `lastActivityAt`: timestamp
+    - `expiresAt`: timestamp
+    - `updatedAt`: timestamp
+
 - `students` (document id = auto-generated)
   - Fields:
     - `name`: string

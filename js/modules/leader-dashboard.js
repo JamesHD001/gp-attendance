@@ -106,7 +106,6 @@ export class LeaderDashboard {
     if (logoutBtn) {
       logoutBtn.addEventListener('click', async () => {
         await AuthService.logout();
-        window.location.href = '../index.html';
       });
     }
 

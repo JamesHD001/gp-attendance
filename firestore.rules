@@ -70,6 +70,16 @@ service cloud.firestore {
     }
 
     // ====================
+    // USER SESSIONS COLLECTION
+    // ====================
+    match /userSessions/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+
+      allow create, update, delete: if isSignedIn() &&
+        request.auth.uid == userId;
+    }
+
+    // ====================
     // CLASSES COLLECTION
     // ====================
     match /classes/{classId} {

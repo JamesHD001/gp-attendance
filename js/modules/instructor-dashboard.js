@@ -1,4 +1,4 @@
-import { auth, db, firebaseSignOut } from '../firebase-config.js';
+import { db } from '../firebase-config.js';
 import { AuthService } from './auth.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
 import {
@@ -167,7 +167,7 @@ export class InstructorDashboard {
       });
     });
     document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-      await firebaseSignOut(auth); window.location.href = "../index.html";
+      await AuthService.logout();
     });
   }
 
