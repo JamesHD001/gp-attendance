@@ -64,6 +64,16 @@ export async function updateClassLockStatus(classId, isLocked) {
 
 }
 
+export async function updateClassInstructor(classId, instructorId = "") {
+
+  const classRef = doc(db, "classes", classId);
+
+  await updateDoc(classRef, {
+    instructorId: instructorId || ""
+  });
+
+}
+
 
 /* ===========================
    USER OPERATIONS

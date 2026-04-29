@@ -3,7 +3,7 @@
 
 import {
   initializeClasses, getClasses, getAllUsers, createClass,
-  updateClassLockStatus, deleteUser, addStudent, getStudents,
+  updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents,
   deleteStudent
 } from './firestore.js';
 import { AuthService } from './auth.js';
@@ -192,6 +192,12 @@ export class AdminDashboard {
     tab.appendChild(stats);
   }
 
+  getInstructorForClass(classRecord) {
+    return this.users.find(user => user.id === classRecord.instructorId)
+      || this.users.find(user => user.role === 'instructor' && user.assignedClassId === classRecord.id)
+      || null;
+  }
+
   async renderClassesTab() {
     const tab = document.getElementById('classesTab'); clearElement(tab);
     const h = document.createElement('div'); h.className = 'flex-between mb-lg';
@@ -202,7 +208,7 @@ export class AdminDashboard {
       return;
     }
     const rows = this.classes.map(cls => {
-      const instructor = this.users.find(u => u.id === cls.instructorId);
+      const instructor = this.getInstructorForClass(cls);
       return {
         'Class Name': cls.name,
         'Instructor': instructor ? instructor.name : 'Unassigned',
@@ -338,7 +344,7 @@ export class AdminDashboard {
     const createBtn = createButton('Create User', async () => {
       const name = (nameInput.value||'').trim(), email = (emailInput.value||'').trim();
       const password = passwordInput.value, role = roleSelect.value;
-      const assignedClassId = classSelect.value || null;
+      const assignedClassId = role === 'instructor' ? (classSelect.value || null) : null;
       if (!name || !email || !password || !role) { showNotification('Please fill all required fields', 'warning'); return; }
       try {
         const secondaryApp = getApps().find(a => a.name==='admin-user-creator') || initializeApp(firebaseConfig,'admin-user-creator');
@@ -350,7 +356,12 @@ export class AdminDashboard {
           assignedClassId,  // FIX Bug 5: standardized field name
           createdAt: serverTimestamp()
         });
-        modal.remove(); await this.loadUsers(); this.renderUsersTab();
+        if (assignedClassId) {
+          await updateClassInstructor(assignedClassId, cred.user.uid);
+        }
+        modal.remove();
+        await Promise.all([this.loadUsers(), this.loadClasses()]);
+        this.renderUsersTab();
         showNotification('User created successfully','success');
       } catch (err) { console.error('Create user failed:',err); showNotification(`Failed to create user: ${err.message||'Unknown error'}`,'error'); }
     });
