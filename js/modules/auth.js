@@ -394,6 +394,16 @@ export class AuthService {
     return window.location.pathname.includes('/pages/') ? '../index.html' : 'index.html';
   }
 
+  static getDashboardPath(targetFile) {
+    if (typeof window === 'undefined') {
+      return `pages/${targetFile}`;
+    }
+
+    return window.location.pathname.includes('/pages/')
+      ? targetFile
+      : `pages/${targetFile}`;
+  }
+
   static buildIndexUrl(reason = null) {
     const indexPath = AuthService.getIndexPath();
 
@@ -432,7 +442,11 @@ export class AuthService {
 
     AuthService.waitForAuthReady()
       .then(() => {
-        unsubscribe = onAuthStateChanged(auth, callback);
+        unsubscribe = onAuthStateChanged(auth, (user) => {
+          Promise.resolve(callback(user)).catch((error) => {
+            console.error('Auth state change handler failed:', error);
+          });
+        });
       })
       .catch((error) => {
         console.error('Auth state listener setup failed:', error);
@@ -446,7 +460,11 @@ export class AuthService {
 
     if (!user) {
       window.location.href = AuthService.getIndexPath();
-      return;
+      return {
+        redirected: true,
+        reason: 'missing-user',
+        path: AuthService.getIndexPath()
+      };
     }
 
     try {
@@ -455,29 +473,37 @@ export class AuthService {
 
       // If user record exists but role is not set yet, avoid kicking the user
       // back to the login screen which creates a redirect loop.
-      if (role == null) {
+      if (role == null || role === '') {
         console.warn('User role not found for', user.uid, '- staying on current page for manual handling.');
-        return;
+        return {
+          redirected: false,
+          reason: 'missing-role'
+        };
       }
 
-      let redirectPath = AuthService.getIndexPath();
+      let redirectPath = null;
 
       switch (role) {
 
         case "admin":
-          redirectPath = "pages/admin-dashboard.html";
+          redirectPath = AuthService.getDashboardPath('admin-dashboard.html');
           break;
 
         case "instructor":
-          redirectPath = "pages/instructor-dashboard.html";
+          redirectPath = AuthService.getDashboardPath('instructor-dashboard.html');
           break;
 
         case "leader":
-          redirectPath = "pages/leader-dashboard.html";
+          redirectPath = AuthService.getDashboardPath('leader-dashboard.html');
           break;
 
         default:
-          redirectPath = AuthService.getIndexPath();
+          console.warn('Unsupported user role for dashboard redirect:', role);
+          return {
+            redirected: false,
+            reason: 'unsupported-role',
+            role
+          };
       }
 
       const currentPage = window.location.pathname;
@@ -486,7 +512,20 @@ export class AuthService {
       // Prevent redirect loop by comparing filenames
       if (!currentPage.endsWith(targetFile)) {
         window.location.href = redirectPath;
+        return {
+          redirected: true,
+          reason: 'navigated',
+          path: redirectPath,
+          role
+        };
       }
+
+      return {
+        redirected: false,
+        reason: 'already-on-target',
+        path: redirectPath,
+        role
+      };
 
     } catch (error) {
 
@@ -495,7 +534,11 @@ export class AuthService {
       // cause a redirect loop if Firestore read fails or permissions are
       // temporarily unavailable. Leave the user on the current page so
       // they can retry or the client can recover.
-      return;
+      return {
+        redirected: false,
+        reason: 'lookup-error',
+        error
+      };
 
     }
   }
