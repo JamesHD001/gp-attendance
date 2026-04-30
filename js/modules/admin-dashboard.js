@@ -255,8 +255,7 @@ export class AdminDashboard {
     }
     const rows = this.users.map(user => ({
       'Name': user.name, 'Email': user.email, 'Role': user.role,
-      // FIX Bug 5: only use assignedClassId
-      'Class': user.assignedClassId || '—',
+      'Class': this.classes.find(cls => cls.id === user.assignedClassId)?.name || '—',
       'Actions': () => {
         const btn = document.createElement('button'); btn.className = 'btn btn-danger btn-small'; btn.textContent = 'Delete';
         btn.addEventListener('click', async () => {
@@ -336,16 +335,43 @@ export class AdminDashboard {
   showAddUserModal() {
     const nameInput = createInput('text', 'Full Name', 'userName');
     const emailInput = createInput('email', 'Email', 'userEmail');
-    const passwordInput = createInput('password', 'Temporary Password', 'userPassword');
+    const passwordInput = createInput('password', 'Set a login password', 'userPassword');
+    const confirmPasswordInput = createInput('password', 'Confirm login password', 'userPasswordConfirm');
     const roleSelect = createSelect([{ label:'Select role...',value:'' },{ label:'Instructor',value:'instructor' },{ label:'Leader',value:'leader' }], 'userRole');
-    const classSelect = createSelect([{ label:'No Class',value:'' }, ...this.classes.map(c=>({ label:c.name,value:c.id }))], 'userClass');
-    const form = document.createElement('div'); form.append(nameInput, emailInput, passwordInput, roleSelect, classSelect);
+    const classSelect = createSelect([{ label:'No class assigned',value:'' }, ...this.classes.map(c=>({ label:c.name,value:c.id }))], 'userClass');
+    const helperText = document.createElement('p');
+    helperText.className = 'text-muted';
+    helperText.textContent = 'Set the email and password this instructor or leader will use to sign in.';
+
+    emailInput.autocomplete = 'email';
+    nameInput.autocomplete = 'name';
+    passwordInput.autocomplete = 'new-password';
+    confirmPasswordInput.autocomplete = 'new-password';
+    passwordInput.minLength = 6;
+    confirmPasswordInput.minLength = 6;
+
+    const syncClassSelectState = () => {
+      const isInstructor = roleSelect.value === 'instructor';
+      classSelect.disabled = !isInstructor;
+
+      if (!isInstructor) {
+        classSelect.value = '';
+      }
+    };
+
+    syncClassSelectState();
+    roleSelect.addEventListener('change', syncClassSelectState);
+
+    const form = document.createElement('div');
+    form.append(helperText, nameInput, emailInput, passwordInput, confirmPasswordInput, roleSelect, classSelect);
     let modal;
     const createBtn = createButton('Create User', async () => {
       const name = (nameInput.value||'').trim(), email = (emailInput.value||'').trim();
-      const password = passwordInput.value, role = roleSelect.value;
+      const password = passwordInput.value, confirmPassword = confirmPasswordInput.value, role = roleSelect.value;
       const assignedClassId = role === 'instructor' ? (classSelect.value || null) : null;
-      if (!name || !email || !password || !role) { showNotification('Please fill all required fields', 'warning'); return; }
+      if (!name || !email || !password || !confirmPassword || !role) { showNotification('Please fill all required fields', 'warning'); return; }
+      if (password.length < 6) { showNotification('Password must be at least 6 characters long', 'warning'); return; }
+      if (password !== confirmPassword) { showNotification('Passwords do not match', 'warning'); return; }
       try {
         const secondaryApp = getApps().find(a => a.name==='admin-user-creator') || initializeApp(firebaseConfig,'admin-user-creator');
         const secondaryAuth = getAuth(secondaryApp);
@@ -362,8 +388,21 @@ export class AdminDashboard {
         modal.remove();
         await Promise.all([this.loadUsers(), this.loadClasses()]);
         this.renderUsersTab();
-        showNotification('User created successfully','success');
-      } catch (err) { console.error('Create user failed:',err); showNotification(`Failed to create user: ${err.message||'Unknown error'}`,'error'); }
+        showNotification('User created successfully. They can now sign in with this email and password.','success');
+      } catch (err) {
+        console.error('Create user failed:',err);
+
+        let message = err.message || 'Unknown error';
+        if (err?.code === 'auth/email-already-in-use') {
+          message = 'That email is already in use.';
+        } else if (err?.code === 'auth/invalid-email') {
+          message = 'Please enter a valid email address.';
+        } else if (err?.code === 'auth/weak-password') {
+          message = 'Password must be at least 6 characters long.';
+        }
+
+        showNotification(`Failed to create user: ${message}`,'error');
+      }
     });
     const cancelBtn = createButton('Cancel', () => modal.remove());
     modal = createModal('Add New User', form, [createBtn, cancelBtn]);

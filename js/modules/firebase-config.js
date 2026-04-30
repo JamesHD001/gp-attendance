@@ -6,6 +6,7 @@ import {
   getAuth, 
   setPersistence,
   browserSessionPersistence,
+  inMemoryPersistence,
   signOut as firebaseSignOut 
 } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js';
 
@@ -32,7 +33,11 @@ let authPersistenceReady = Promise.resolve();
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  authPersistenceReady = setPersistence(auth, browserSessionPersistence);
+  authPersistenceReady = setPersistence(auth, browserSessionPersistence)
+    .catch(async (error) => {
+      console.warn('Browser session persistence is unavailable; falling back to in-memory auth state.', error);
+      await setPersistence(auth, inMemoryPersistence);
+    });
   db = getFirestore(app);
 } catch (error) {
   console.error('Firebase initialization error:', error);

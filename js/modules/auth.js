@@ -24,6 +24,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const SESSION_WARNING_MS = 60 * 1000;
 const SESSION_SYNC_THROTTLE_MS = 60 * 1000;
 const SESSION_ACTIVITY_EVENTS = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+const PENDING_SESSION_STORAGE_KEY = 'gpPendingSessionUid';
 
 export class AuthService {
 
@@ -34,6 +35,62 @@ export class AuthService {
 
   static async waitForAuthReady() {
     await authPersistenceReady;
+  }
+
+  static canUseSessionStorage() {
+    try {
+      return typeof window !== 'undefined' && Boolean(window.sessionStorage);
+    } catch (error) {
+      console.warn('Session storage is unavailable:', error);
+      return false;
+    }
+  }
+
+  static markPendingSessionHydration(userId) {
+    if (!userId || !AuthService.canUseSessionStorage()) return;
+    window.sessionStorage.setItem(PENDING_SESSION_STORAGE_KEY, userId);
+  }
+
+  static getPendingSessionHydrationUid() {
+    if (!AuthService.canUseSessionStorage()) return null;
+    return window.sessionStorage.getItem(PENDING_SESSION_STORAGE_KEY);
+  }
+
+  static clearPendingSessionHydration(userId = null) {
+    if (!AuthService.canUseSessionStorage()) return;
+
+    if (userId && window.sessionStorage.getItem(PENDING_SESSION_STORAGE_KEY) !== userId) {
+      return;
+    }
+
+    window.sessionStorage.removeItem(PENDING_SESSION_STORAGE_KEY);
+  }
+
+  static shouldHydrateMissingSession(user) {
+    if (!user?.uid) return false;
+
+    if (AuthService.isHydratingSession && auth.currentUser?.uid === user.uid) {
+      return true;
+    }
+
+    return AuthService.getPendingSessionHydrationUid() === user.uid;
+  }
+
+  static getLoginErrorMessage(error) {
+    switch (error?.code) {
+      case 'auth/invalid-credential':
+      case 'auth/invalid-email':
+      case 'auth/invalid-login-credentials':
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+        return 'Invalid email or password.';
+      case 'auth/too-many-requests':
+        return 'Too many sign-in attempts. Please wait a moment and try again.';
+      case 'auth/network-request-failed':
+        return 'Unable to reach Firebase right now. Check your internet connection and try again.';
+      default:
+        return 'Login failed. Please try again.';
+    }
   }
 
   static getSessionRef(userId) {
@@ -66,8 +123,15 @@ export class AuthService {
   }
 
   static async startSession(user) {
-    if (!user || AuthService.isLocalEnvironment()) return;
-    await AuthService.touchSession(user.uid, { force: true });
+    if (!user || AuthService.isLocalEnvironment()) return true;
+
+    try {
+      await AuthService.touchSession(user.uid, { force: true });
+      return true;
+    } catch (error) {
+      console.error('Failed to start session:', error);
+      return false;
+    }
   }
 
   static async ensureSessionActive(user) {
@@ -76,8 +140,11 @@ export class AuthService {
     const sessionSnapshot = await getDoc(AuthService.getSessionRef(user.uid));
 
     if (!sessionSnapshot.exists()) {
-      if (AuthService.isHydratingSession && auth.currentUser?.uid === user.uid) {
-        await AuthService.startSession(user);
+      if (AuthService.shouldHydrateMissingSession(user)) {
+        const sessionStarted = await AuthService.startSession(user);
+        if (sessionStarted) {
+          AuthService.clearPendingSessionHydration(user.uid);
+        }
         return true;
       }
       return false;
@@ -91,6 +158,7 @@ export class AuthService {
       return false;
     }
 
+    AuthService.clearPendingSessionHydration(user.uid);
     return true;
   }
 
@@ -186,30 +254,37 @@ export class AuthService {
     AuthService.stopSessionMonitoring();
     AuthService.activeSessionUid = user.uid;
 
-    await AuthService.touchSession(user.uid, { force: true });
+    const sessionStarted = await AuthService.startSession(user);
 
-    AuthService.sessionUnsubscribe = onSnapshot(
-      AuthService.getSessionRef(user.uid),
-      (sessionSnapshot) => {
-        if (!sessionSnapshot.exists()) {
-          void AuthService.handleSessionExpiration();
-          return;
+    AuthService.resetSessionTimers(Date.now() + SESSION_TIMEOUT_MS);
+
+    if (sessionStarted) {
+      AuthService.clearPendingSessionHydration(user.uid);
+      AuthService.sessionUnsubscribe = onSnapshot(
+        AuthService.getSessionRef(user.uid),
+        (sessionSnapshot) => {
+          if (!sessionSnapshot.exists()) {
+            void AuthService.handleSessionExpiration();
+            return;
+          }
+
+          const sessionData = sessionSnapshot.data() || {};
+          const expiresAtMs = sessionData.expiresAt?.toMillis?.() || 0;
+
+          if (sessionData.status !== 'active' || !expiresAtMs || expiresAtMs <= Date.now()) {
+            void AuthService.handleSessionExpiration();
+            return;
+          }
+
+          AuthService.resetSessionTimers(expiresAtMs);
+        },
+        (error) => {
+          console.error('Session listener error:', error);
         }
-
-        const sessionData = sessionSnapshot.data() || {};
-        const expiresAtMs = sessionData.expiresAt?.toMillis?.() || 0;
-
-        if (sessionData.status !== 'active' || !expiresAtMs || expiresAtMs <= Date.now()) {
-          void AuthService.handleSessionExpiration();
-          return;
-        }
-
-        AuthService.resetSessionTimers(expiresAtMs);
-      },
-      (error) => {
-        console.error('Session listener error:', error);
-      }
-    );
+      );
+    } else {
+      console.warn('Session sync is unavailable; using local inactivity timers until sync recovers.');
+    }
 
     AuthService.attachActivityListeners(user.uid);
   }
@@ -220,15 +295,19 @@ export class AuthService {
   }
 
   static async login(email, password) {
+    await AuthService.waitForAuthReady();
+    AuthService.clearPendingSessionHydration();
+    AuthService.isHydratingSession = true;
+
     try {
-      await AuthService.waitForAuthReady();
-      AuthService.isHydratingSession = true;
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      AuthService.markPendingSessionHydration(userCredential.user.uid);
       await AuthService.startSession(userCredential.user);
       return userCredential.user;
     } catch (error) {
       console.error("Login Error:", error);
-      throw new Error("Invalid email or password.");
+      AuthService.clearPendingSessionHydration();
+      throw new Error(AuthService.getLoginErrorMessage(error));
     } finally {
       AuthService.isHydratingSession = false;
     }
@@ -285,6 +364,7 @@ export class AuthService {
 
       AuthService.isLoggingOut = true;
       AuthService.stopSessionMonitoring();
+      AuthService.clearPendingSessionHydration(sessionUserId);
 
       if (isLocal) {
         window.location.href = AuthService.buildIndexUrl(reason);
