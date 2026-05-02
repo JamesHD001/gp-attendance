@@ -34,7 +34,9 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
     requireAuth = false,
     isDemoMode = false,
     emptyStateMessage = 'Sign in to view graduation readiness.',
-    noClassMessage = 'No class is available for graduation readiness yet.'
+    noClassMessage = 'No class is available for graduation readiness yet.',
+    leaderView = false,
+    potentialThreshold = 70
   } = opts;
   clearElement(tab);
 
@@ -168,11 +170,52 @@ export async function renderGraduationTab(tab, classes, opts = {}) {
     );
   };
 
-  classSelect.addEventListener('change', renderClassDetails);
+  // Leader view: show only potential graduands (names and count)
+  const renderLeaderView = async () => {
+    clearElement(detailsContainer);
+
+    const classId = classSelect.value;
+    if (!classId) {
+      detailsContainer.innerHTML = `<p class="text-muted">Select a class to view potential graduands.</p>`;
+      return;
+    }
+
+    let stats;
+    try {
+      stats = await calculateGraduationStats(classId);
+    } catch (error) {
+      console.error('Error loading graduation stats for leader view:', error);
+      detailsContainer.innerHTML = '<p class="text-danger">Unable to load potential graduands right now.</p>';
+      return;
+    }
+
+    if (stats.totalStudents === 0) {
+      detailsContainer.innerHTML = `<p class="text-muted">No students are assigned to this class yet.</p>`;
+      return;
+    }
+
+    const potential = Object.values(stats.studentGraduationStats).filter(s => s.graduationRate >= potentialThreshold);
+
+    detailsContainer.appendChild(createSummaryGrid([
+      { label: 'Class', value: stats.className },
+      { label: 'Potential Graduands', value: potential.length }
+    ]));
+
+    if (potential.length === 0) {
+      detailsContainer.innerHTML += '<p class="text-muted">No potential graduands at this time.</p>';
+      return;
+    }
+
+    const rows = potential.map(p => ({ 'Potential Graduand': p.name }));
+    detailsContainer.appendChild(createTable(['Potential Graduand'], rows));
+  };
+
+  classSelect.addEventListener('change', leaderView ? renderLeaderView : renderClassDetails);
 
   try {
     await renderOverview();
-    await renderClassDetails();
+    if (leaderView) await renderLeaderView();
+    else await renderClassDetails();
   } catch (error) {
     console.error('Error initializing graduation tab:', error);
     clearElement(tab);

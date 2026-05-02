@@ -348,6 +348,8 @@ export class LeaderDashboard {
     await renderGraduationTab(tab, this.classes, {
       requireAuth: true,
       isDemoMode: this.isDemoMode,
+      leaderView: true,
+      potentialThreshold: 70,
       emptyStateMessage: 'Graduation readiness is available after signing in as an authenticated leader.'
     });
   }
