@@ -154,7 +154,7 @@ export class InstructorDashboard {
     if (this.eventListenersInitialized) return;
     this.eventListenersInitialized = true;
     document.querySelectorAll(".tab-btn").forEach(btn =>
-      btn.addEventListener("click", (e) => this.switchTab(e.target.dataset.tab, e)));
+      btn.addEventListener("click", (e) => this.switchTab(e.currentTarget.dataset.tab, e)));
     const navLinks = document.querySelectorAll('.nav-link');
     const mapHash = h => ({ overview:'students',students:'students',attendance:'attendance',performance:'performance',graduation:'graduation',analytics:'stats' })[(h||'').replace('#','')] || (h||'').replace('#','');
     navLinks.forEach(link => {
@@ -296,7 +296,8 @@ export class InstructorDashboard {
       btn.addEventListener("click", async (e) => {
         if (!confirm('Delete this session?')) return;
         try {
-          await deleteSession(e.target.dataset.id);
+          const id = e.currentTarget.dataset.id;
+          await deleteSession(id);
           await this.loadSessions();
           this.renderAttendanceTab();
           showNotification('Session deleted', 'success');

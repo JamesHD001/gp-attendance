@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AuthService Tests</title>
+  </head>
+  <body>
+    <script>
+      // Minimal mocks and extracted logic for testing
+      const consoleOut = msg => console.log(msg);
+
+      // Mock storage and auth
+      const mockSessionStorage = (function(){
+        const store = {};
+        return {
+          getItem(k){ return store[k] || null },
+          setItem(k,v){ store[k]=String(v) },
+          removeItem(k){ delete store[k] }
+        };
+      })();
+
+      const PENDING_SESSION_STORAGE_KEY = 'gpPendingSessionUid';
+
+      const auth = { currentUser: null };
+
+      function getPendingSessionHydrationUid(){
+        return mockSessionStorage.getItem(PENDING_SESSION_STORAGE_KEY);
+      }
+
+      function markPending(uid){ mockSessionStorage.setItem(PENDING_SESSION_STORAGE_KEY, uid); }
+      function clearPending(){ mockSessionStorage.removeItem(PENDING_SESSION_STORAGE_KEY); }
+
+      function shouldHydrateMissingSession(user){
+        if (!user || !user.uid) return false;
+        if (auth.currentUser && auth.currentUser.uid === user.uid) return true;
+        return getPendingSessionHydrationUid() === user.uid;
+      }
+
+      // Mock getUserRole and showNotification
+      let mockedRole = undefined; // undefined -> role missing, null->no user, or string role
+      function getUserRole(uid){
+        return Promise.resolve(mockedRole);
+      }
+
+      function showNotification(msg, type){ consoleOut(`NOTIFY:${type}:${msg}`); }
+
+      async function redirectBasedOnRole(user){
+        if (!user) { consoleOut('REDIRECT:missing-user'); return { redirected: true, reason: 'missing-user' }; }
+        const role = await getUserRole(user.uid);
+        if (role == null || role === '') {
+          showNotification('Your account does not have a dashboard role yet. Ask an admin to set your role.', 'warning');
+          return { redirected: false, reason: 'missing-role' };
+        }
+        return { redirected: true, reason: 'navigated', role };
+      }
+
+      // Run tests
+      (async function(){
+        // Test A: hydration when auth.currentUser matches
+        auth.currentUser = { uid: 'user123' };
+        const resA = shouldHydrateMissingSession({ uid: 'user123' });
+        consoleOut(resA ? 'TEST-PASS:hydration-current-user' : 'TEST-FAIL:hydration-current-user');
+
+        // Test B: hydration via pending marker
+        auth.currentUser = null; clearPending(); markPending('pending-uid');
+        const resB = shouldHydrateMissingSession({ uid: 'pending-uid' });
+        consoleOut(resB ? 'TEST-PASS:hydration-pending-marker' : 'TEST-FAIL:hydration-pending-marker');
+
+        // Test C: missing-role triggers notification and returns missing-role
+        mockedRole = undefined;
+        const r = await redirectBasedOnRole({ uid: 'u1' });
+        consoleOut(r.redirected === false && r.reason === 'missing-role' ? 'TEST-PASS:missing-role' : 'TEST-FAIL:missing-role');
+
+        // Test D: supported role navigates
+        mockedRole = 'admin';
+        const r2 = await redirectBasedOnRole({ uid: 'u1' });
+        consoleOut(r2.redirected === true && r2.role === 'admin' ? 'TEST-PASS:role-redirect-admin' : 'TEST-FAIL:role-redirect-admin');
+
+      })();
+    </script>
+  </body>
+</html>

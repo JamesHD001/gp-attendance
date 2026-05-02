@@ -69,10 +69,10 @@ export class AuthService {
   static shouldHydrateMissingSession(user) {
     if (!user?.uid) return false;
 
-    if (AuthService.isHydratingSession && auth.currentUser?.uid === user.uid) {
-      return true;
-    }
+    // If the current authenticated user matches, hydrate.
+    if (auth.currentUser?.uid === user.uid) return true;
 
+    // Fall back to the pending-session marker in sessionStorage (handles reloads during login).
     return AuthService.getPendingSessionHydrationUid() === user.uid;
   }
 
@@ -322,7 +322,8 @@ export class AuthService {
     const user = auth.currentUser;
 
     if (!user) {
-      window.location.href = AuthService.getIndexPath();
+      const idx = AuthService.getIndexPath();
+      window.location.href = new URL(idx, window.location.href).href;
       return false;
     }
   
@@ -346,13 +347,11 @@ export class AuthService {
       return true;
   
     } catch (error) {
-  
       console.error("Role error:", error);
-      window.location.href = AuthService.getIndexPath();
+      const idx = AuthService.getIndexPath();
+      window.location.href = new URL(idx, window.location.href).href;
       return false;
-  
     }
-  
   }
 
   static async logout(options = {}) {
@@ -367,9 +366,9 @@ export class AuthService {
       AuthService.clearPendingSessionHydration(sessionUserId);
 
       if (isLocal) {
-        window.location.href = AuthService.buildIndexUrl(reason);
-        return;
-      }
+          window.location.href = new URL(AuthService.buildIndexUrl(reason), window.location.href).href;
+          return;
+        }
 
       if (sessionUserId && !skipSessionCleanup) {
         await deleteDoc(AuthService.getSessionRef(sessionUserId)).catch((error) => {
@@ -381,7 +380,7 @@ export class AuthService {
         await firebaseSignOut(auth);
       }
 
-      window.location.href = AuthService.buildIndexUrl(reason);
+      window.location.href = new URL(AuthService.buildIndexUrl(reason), window.location.href).href;
     } catch (error) {
       console.error("Logout Error:", error);
       throw new Error("Logout failed.");
@@ -459,11 +458,12 @@ export class AuthService {
   static async redirectBasedOnRole(user) {
 
     if (!user) {
-      window.location.href = AuthService.getIndexPath();
+      const idx = AuthService.getIndexPath();
+      window.location.href = new URL(idx, window.location.href).href;
       return {
         redirected: true,
         reason: 'missing-user',
-        path: AuthService.getIndexPath()
+        path: new URL(idx, window.location.href).href
       };
     }
 
@@ -475,6 +475,11 @@ export class AuthService {
       // back to the login screen which creates a redirect loop.
       if (role == null || role === '') {
         console.warn('User role not found for', user.uid, '- staying on current page for manual handling.');
+        try {
+          showNotification('Your account does not have a dashboard role yet. Ask an admin to set your role.', 'warning');
+        } catch (e) {
+          console.warn('showNotification unavailable:', e);
+        }
         return {
           redirected: false,
           reason: 'missing-role'
@@ -511,11 +516,12 @@ export class AuthService {
 
       // Prevent redirect loop by comparing filenames
       if (!currentPage.endsWith(targetFile)) {
-        window.location.href = redirectPath;
+        const resolved = new URL(redirectPath, window.location.href).href;
+        window.location.href = resolved;
         return {
           redirected: true,
           reason: 'navigated',
-          path: redirectPath,
+          path: resolved,
           role
         };
       }

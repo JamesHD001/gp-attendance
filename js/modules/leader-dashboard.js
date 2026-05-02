@@ -110,7 +110,7 @@ export class LeaderDashboard {
     }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab, e));
+      btn.addEventListener('click', (e) => this.switchTab(e.currentTarget.dataset.tab, e));
     });
 
     const navLinks = document.querySelectorAll('.nav-link');

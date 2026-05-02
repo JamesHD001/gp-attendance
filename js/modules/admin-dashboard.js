@@ -4,7 +4,7 @@
 import {
   initializeClasses, getClasses, getAllUsers, createClass,
   updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents,
-  deleteStudent
+  deleteStudent, getUserData
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
@@ -29,6 +29,7 @@ export class AdminDashboard {
     this.isLoading = true;
     this.currentTab = 'overview';
     this.eventListenersInitialized = false;
+    this._fetchingUserIds = new Set();
   }
 
   async init() {
@@ -107,7 +108,7 @@ export class AdminDashboard {
     });
 
     document.querySelectorAll('.tab-btn').forEach(btn =>
-      btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab, e)));
+      btn.addEventListener('click', (e) => this.switchTab(e.currentTarget.dataset.tab, e)));
 
     const navLinks = document.querySelectorAll('.nav-link');
     const mapHash = h => ({ overview:'overview', classes:'classes', users:'users', attendance:'students', analytics:'analytics', graduation:'graduation' })[(h||'').replace('#','')] || (h||'').replace('#','');
@@ -208,10 +209,29 @@ export class AdminDashboard {
       return;
     }
     const rows = this.classes.map(cls => {
-      const instructor = this.getInstructorForClass(cls);
+      let instructor = this.getInstructorForClass(cls);
+      // If class references an instructorId but user is not yet loaded, fetch it and re-render
+      if (!instructor && cls.instructorId && !this._fetchingUserIds.has(cls.instructorId)) {
+        this._fetchingUserIds.add(cls.instructorId);
+        getUserData(cls.instructorId).then(userDoc => {
+          if (userDoc) {
+            this.users.push(userDoc);
+            this._fetchingUserIds.delete(cls.instructorId);
+            // Re-render classes tab to show updated instructor
+            this.renderClassesTab();
+          } else {
+            this._fetchingUserIds.delete(cls.instructorId);
+          }
+        }).catch(err => {
+          console.error('Failed to fetch instructor user doc:', err);
+          this._fetchingUserIds.delete(cls.instructorId);
+        });
+      }
+      const instructorDisplay = instructor ? (instructor.name || instructor.email || instructor.id || 'Unknown') : (cls.instructorId ? 'Loading...' : 'Unassigned');
+
       return {
         'Class Name': cls.name,
-        'Instructor': instructor ? instructor.name : 'Unassigned',
+        'Instructor': instructorDisplay,
         'Status': cls.isLocked ? '🔒 Locked' : '🔓 Unlocked',
         'Actions': () => {
           const btn = document.createElement('button');
