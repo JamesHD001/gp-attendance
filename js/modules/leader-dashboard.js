@@ -6,6 +6,7 @@ import {
   getStudentsByClass,
   getSessionsByClass,
   getAttendanceBySession,
+  calculateGraduationStats
 } from './firestore.js';
 
 import { AuthService } from './auth.js';
@@ -116,7 +117,7 @@ export class LeaderDashboard {
     const navLinks = document.querySelectorAll('.nav-link');
     const mapHashToTab = (hash) => {
       if (!hash) return '';
-      const map = { overview: 'overview', reports: 'reports', analytics: 'analytics', graduation: 'graduation' };
+      const map = { overview: 'overview', reports: 'reports', analytics: 'analytics', graduation: 'graduation', graduands: 'graduands' };
       return map[hash.replace('#', '')] || hash.replace('#', '');
     };
 
@@ -169,6 +170,88 @@ export class LeaderDashboard {
     if (tabName === 'reports')   this.renderReportsTab();
     if (tabName === 'analytics') this.renderAnalyticsTab();
     if (tabName === 'graduation') this.renderGraduationTab();
+    if (tabName === 'graduands') this.renderGraduandsTab();
+  }
+
+  async renderGraduandsTab() {
+    const tab = document.getElementById('graduandsTab');
+    clearElement(tab);
+
+    const container = document.createElement('div');
+    container.className = 'analytics-container';
+
+    const heading = document.createElement('div');
+    heading.className = 'flex-between mb-lg';
+    heading.innerHTML = `
+      <div>
+        <h2>Potential Graduands</h2>
+        <p class="text-muted">List of students likely to graduate, across all classes. Leaders can filter by class.</p>
+      </div>
+    `;
+    container.appendChild(heading);
+
+    const controls = document.createElement('div');
+    controls.className = 'flex gap-md mb-lg';
+
+    const classOptions = [
+      { label: 'All Classes', value: '' },
+      ...this.classes.map(c => ({ label: c.name, value: c.id }))
+    ];
+
+    const classSelect = createSelect(classOptions, 'graduandsClassSelect', '');
+    controls.append(classSelect);
+    container.appendChild(controls);
+
+    const resultsContainer = document.createElement('div');
+    resultsContainer.id = 'graduandsResults';
+    container.appendChild(resultsContainer);
+
+    const potentialThreshold = 70;
+
+    const loadAndRender = async () => {
+      clearElement(resultsContainer);
+      resultsContainer.appendChild(createTableSkeleton(4, 2));
+
+      let targets = this.classes;
+      if (!targets || targets.length === 0) {
+        resultsContainer.innerHTML = '<p class="text-muted">No classes available.</p>';
+        return;
+      }
+
+      try {
+        const statsList = await Promise.all(targets.map(cls => calculateGraduationStats(cls.id)));
+
+        const potentials = [];
+        for (const stats of statsList) {
+          if (!stats || !stats.studentGraduationStats) continue;
+          for (const s of Object.values(stats.studentGraduationStats)) {
+            if (s.graduationRate >= potentialThreshold) {
+              potentials.push({ name: s.name, className: stats.className });
+            }
+          }
+        }
+
+        const filterClass = classSelect.value;
+        const filtered = filterClass ? potentials.filter(p => p.className && this.classes.find(c => c.id === filterClass)?.name === p.className) : potentials;
+
+        if (filtered.length === 0) {
+          resultsContainer.innerHTML = '<p class="text-muted">No potential graduands found.</p>';
+          return;
+        }
+
+        const rows = filtered.map(p => ({ 'Student': p.name, 'Class': p.className }));
+        resultsContainer.appendChild(createTable(['Student', 'Class'], rows));
+      } catch (err) {
+        console.error('Failed to load potential graduands:', err);
+        resultsContainer.innerHTML = '<p class="text-danger">Unable to load potential graduands right now.</p>';
+      }
+    };
+
+    classSelect.addEventListener('change', loadAndRender);
+
+    await loadAndRender();
+
+    tab.appendChild(container);
   }
 
   renderDashboard() {
@@ -195,6 +278,7 @@ export class LeaderDashboard {
       <button class="tab-btn" data-tab="reports">Reports</button>
       <button class="tab-btn" data-tab="analytics">Analytics</button>
       <button class="tab-btn" data-tab="graduation">Graduation</button>
+      <button class="tab-btn" data-tab="graduands">Graduands</button>
     `;
     mainContent.appendChild(tabNav);
 
@@ -204,6 +288,7 @@ export class LeaderDashboard {
       <div id="reportsTab"    class="tab-content hidden"></div>
       <div id="analyticsTab"  class="tab-content hidden"></div>
       <div id="graduationTab" class="tab-content hidden"></div>
+      <div id="graduandsTab"  class="tab-content hidden"></div>
     `;
     mainContent.appendChild(tabContent);
 

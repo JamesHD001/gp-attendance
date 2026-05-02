@@ -11,14 +11,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper function to get user's role
+    // Helper function to get user's role (safe when user doc missing)
     function getUserRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return userDoc.exists() ? userDoc.data.role : null;
     }
 
     // BUG FIX: was `assignedClass` — now `assignedClassId` to match schema
     function getUserAssignedClass(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.assignedClassId;
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return userDoc.exists() ? userDoc.data.assignedClassId : null;
     }
 
     // Helper function to check if user is admin
