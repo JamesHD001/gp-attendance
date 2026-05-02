@@ -195,25 +195,24 @@ export class AdminDashboard {
     tab.appendChild(stats);
 
     // Motivation quote + simple GP analytics moved to Overview
-    const analyticsRow = document.createElement('div');
-    analyticsRow.className = 'flex gap-lg mt-lg';
-
     const quoteCard = document.createElement('div');
-    quoteCard.className = 'card';
+    quoteCard.className = 'card motivation-card';
+    const quoteHeading = document.createElement('h3');
+    quoteHeading.textContent = 'Daily Inspiration';
+    quoteHeading.style.marginBottom = '1rem';
+    quoteCard.appendChild(quoteHeading);
     const quoteBox = document.createElement('div');
     quoteBox.id = 'adminQuoteBox';
-    quoteBox.style.padding = '1rem';
+    quoteBox.className = 'quote-box';
     displayRandomQuote(quoteBox);
     quoteCard.appendChild(quoteBox);
+    tab.appendChild(quoteCard);
 
     const gpStatsCard = document.createElement('div');
     gpStatsCard.className = 'card';
     gpStatsCard.style.padding = '1rem';
     gpStatsCard.innerHTML = '<h3>Gathering Place Attendance</h3><div id="gpOverviewStats">Loading...</div>';
-
-    analyticsRow.appendChild(quoteCard);
-    analyticsRow.appendChild(gpStatsCard);
-    tab.appendChild(analyticsRow);
+    tab.appendChild(gpStatsCard);
 
     // Mark Attendance controls
     const attendRow = document.createElement('div');
