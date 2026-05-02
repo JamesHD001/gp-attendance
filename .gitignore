@@ -90,6 +90,11 @@ serviceAccount*.json
 credentials.json
 secrets/
 
+# Firebase emulator and exports
+.firebase_export/
+.firestore/
+firestore.debug.log
+
 # Local generated firebase config (if present)
 js/firebase-config.local.js
 .env.local
