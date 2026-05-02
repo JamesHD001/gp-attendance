@@ -4,7 +4,7 @@
 import {
   initializeClasses, getClasses, getAllUsers, createClass,
   updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents,
-  deleteStudent, getUserData
+  deleteStudent, getUserData, createSession, getGatheringPlaceStats
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
@@ -16,7 +16,7 @@ import {
   createStatCard, createButton, createInput, createSelect,
   createModal, createStatsSkeleton, createTableSkeleton
 } from './ui-utils.js';
-import { renderAnalyticsTab } from './analytics-utils.js';
+import { renderAnalyticsTab, displayRandomQuote } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
 
 export class AdminDashboard {
@@ -191,6 +191,115 @@ export class AdminDashboard {
     stats.appendChild(createStatCard('Leaders/Instructors', this.users.length));
     stats.appendChild(createStatCard('Students', this.students.length));
     tab.appendChild(stats);
+
+    // Motivation quote + simple GP analytics moved to Overview
+    const analyticsRow = document.createElement('div');
+    analyticsRow.className = 'flex gap-lg mt-lg';
+
+    const quoteCard = document.createElement('div');
+    quoteCard.className = 'card';
+    const quoteBox = document.createElement('div');
+    quoteBox.id = 'adminQuoteBox';
+    quoteBox.style.padding = '1rem';
+    displayRandomQuote(quoteBox);
+    quoteCard.appendChild(quoteBox);
+
+    const gpStatsCard = document.createElement('div');
+    gpStatsCard.className = 'card';
+    gpStatsCard.style.padding = '1rem';
+    gpStatsCard.innerHTML = '<h3>Gathering Place Attendance</h3><div id="gpOverviewStats">Loading...</div>';
+
+    analyticsRow.appendChild(quoteCard);
+    analyticsRow.appendChild(gpStatsCard);
+    tab.appendChild(analyticsRow);
+
+    // Mark Attendance controls
+    const attendRow = document.createElement('div');
+    attendRow.className = 'flex-between mt-lg';
+    attendRow.innerHTML = `
+      <div>
+        <button id="markAllAttendanceBtn" class="btn btn-primary">Mark Attendance (All Classes)</button>
+      </div>
+    `;
+    tab.appendChild(attendRow);
+
+    // Load GP stats async
+    (async () => {
+      try {
+        const gp = await getGatheringPlaceStats();
+        const cont = document.getElementById('gpOverviewStats');
+        cont.innerHTML = `
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-label">Total Sessions</div><div class="stat-value">${gp.totalSessions}</div></div>
+            <div class="stat-card"><div class="stat-label">Present</div><div class="stat-value">${gp.totalPresent}</div></div>
+            <div class="stat-card"><div class="stat-label">Absent</div><div class="stat-value">${gp.totalAbsent}</div></div>
+            <div class="stat-card"><div class="stat-label">Overall Rate</div><div class="stat-value">${gp.overallRate}%</div></div>
+          </div>
+        `;
+      } catch (err) {
+        console.error('Failed to load GP stats:', err);
+        const cont = document.getElementById('gpOverviewStats');
+        cont.textContent = 'No attendance data available yet.';
+      }
+    })();
+
+    // Wire up mark attendance button
+    document.getElementById('markAllAttendanceBtn')?.addEventListener('click', () => this.showMarkAttendanceModal());
+  }
+
+  async showMarkAttendanceModal() {
+    // Modal UI to mark attendance per class; supports cycling through all classes
+    const classes = this.classes || [];
+    if (!classes.length) { showNotification('No classes available to mark attendance', 'warning'); return; }
+
+    const allStudents = await getStudents();
+
+    let currentIndex = 0;
+
+    const showForClass = async (cls) => {
+      const students = allStudents.filter(s => s.classId === cls.id);
+      const container = document.createElement('div');
+      container.innerHTML = `<h3>Mark Attendance — ${cls.name}</h3>`;
+
+      if (!students.length) {
+        const msg = document.createElement('p'); msg.className = 'text-muted'; msg.textContent = 'No students in this class.'; container.appendChild(msg);
+      } else {
+        const list = document.createElement('div'); list.className = 'attendance-list';
+        students.forEach(st => {
+          const row = document.createElement('div'); row.className = 'flex gap-md align-center mb-sm';
+          const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = true; chk.id = `att_${cls.id}_${st.id}`;
+          const lbl = document.createElement('label'); lbl.htmlFor = chk.id; lbl.textContent = st.name;
+          row.appendChild(chk); row.appendChild(lbl); list.appendChild(row);
+        });
+        container.appendChild(list);
+      }
+
+      const nextBtn = createButton(currentIndex < classes.length - 1 ? 'Save and Next' : 'Save', async () => {
+        // collect records
+        if (students.length) {
+          const records = students.map(st => ({ studentId: st.id, status: document.getElementById(`att_${cls.id}_${st.id}`).checked ? 'present' : 'absent' }));
+          try {
+            await createSession({ classId: cls.id, date: new Date().toISOString(), records, createdBy: this.currentUser?.uid });
+            showNotification(`Saved attendance for ${cls.name}`, 'success');
+          } catch (err) {
+            console.error('Failed to save attendance for class', cls.id, err);
+            showNotification(`Failed to save attendance for ${cls.name}`, 'error');
+          }
+        }
+        modal.remove();
+        currentIndex += 1;
+        if (currentIndex < classes.length) {
+          await showForClass(classes[currentIndex]);
+        }
+      });
+
+      const cancelBtn = createButton('Cancel', () => { modal.remove(); });
+      const modal = createModal(`Mark Attendance — ${cls.name}`, container, [nextBtn, cancelBtn]);
+      document.body.appendChild(modal);
+    };
+
+    // Start with first class
+    await showForClass(classes[currentIndex]);
   }
 
   getInstructorForClass(classRecord) {

@@ -136,30 +136,49 @@ export class AuthService {
 
   static async ensureSessionActive(user) {
     if (!user || AuthService.isLocalEnvironment()) return true;
+    try {
+      const sessionSnapshot = await getDoc(AuthService.getSessionRef(user.uid));
 
-    const sessionSnapshot = await getDoc(AuthService.getSessionRef(user.uid));
-
-    if (!sessionSnapshot.exists()) {
-      if (AuthService.shouldHydrateMissingSession(user)) {
-        const sessionStarted = await AuthService.startSession(user);
-        if (sessionStarted) {
-          AuthService.clearPendingSessionHydration(user.uid);
+      if (!sessionSnapshot.exists()) {
+        if (AuthService.shouldHydrateMissingSession(user)) {
+          const sessionStarted = await AuthService.startSession(user);
+          if (sessionStarted) {
+            AuthService.clearPendingSessionHydration(user.uid);
+          }
+          return true;
         }
-        return true;
+        return false;
+      }
+
+      const sessionData = sessionSnapshot.data() || {};
+      const expiresAtMs = sessionData.expiresAt?.toMillis?.() || 0;
+
+      if (sessionData.status !== 'active' || !expiresAtMs || expiresAtMs <= Date.now()) {
+        await deleteDoc(AuthService.getSessionRef(user.uid)).catch(() => {});
+        return false;
+      }
+
+      AuthService.clearPendingSessionHydration(user.uid);
+      return true;
+    } catch (error) {
+      // Handle permission errors gracefully — sometimes rules or transient
+      // emulator states can cause a permission-denied when reading the
+      // session document. Attempt to start the session (write) as a
+      // recovery path; if that fails, consider the session inactive.
+      console.warn('Failed to read session document:', error);
+      if (error?.code === 'permission-denied' || (error?.message || '').includes('Missing or insufficient permissions')) {
+        try {
+          const sessionStarted = await AuthService.startSession(user);
+          if (sessionStarted) {
+            AuthService.clearPendingSessionHydration(user.uid);
+            return true;
+          }
+        } catch (inner) {
+          console.error('Recovery startSession failed:', inner);
+        }
       }
       return false;
     }
-
-    const sessionData = sessionSnapshot.data() || {};
-    const expiresAtMs = sessionData.expiresAt?.toMillis?.() || 0;
-
-    if (sessionData.status !== 'active' || !expiresAtMs || expiresAtMs <= Date.now()) {
-      await deleteDoc(AuthService.getSessionRef(user.uid)).catch(() => {});
-      return false;
-    }
-
-    AuthService.clearPendingSessionHydration(user.uid);
-    return true;
   }
 
   static resetSessionTimers(expiresAtMs) {
