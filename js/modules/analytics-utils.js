@@ -140,21 +140,8 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
   const mainContainer = document.createElement('div');
   mainContainer.className = 'analytics-container';
 
-  // ── 1. Quote section ──────────────────────────────────────────────────────
-  const quoteSection = document.createElement('div');
-  quoteSection.className = 'quote-section';
-  const quoteBox = document.createElement('div');
-  quoteBox.className = 'quote-box';
-  quoteBox.id = 'quoteBox';
-  displayRandomQuote(quoteBox);
-  quoteSection.appendChild(quoteBox);
-  mainContainer.appendChild(quoteSection);
-
-  if (quoteIntervalRef.current) clearInterval(quoteIntervalRef.current);
-  quoteIntervalRef.current = setInterval(() => {
-    const qb = document.getElementById('quoteBox');
-    if (qb) displayRandomQuote(qb);
-  }, 300000);
+  // Quotes are now shown on the Overview page; analytics tab no longer
+  // renders rotating inspirational quotes to avoid duplication.
 
   // ── 2. GP overall statistics ──────────────────────────────────────────────
   const gpStatsSection = document.createElement('div');
