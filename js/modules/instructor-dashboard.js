@@ -9,7 +9,7 @@ import {
 } from './firestore.js';
 import {
   formatDate, createTable, createTableSkeleton,
-  clearElement, showNotification
+  clearElement, showNotification, createModal, createButton
 } from './ui-utils.js';
 import { renderAnalyticsTab } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
@@ -247,14 +247,17 @@ export class InstructorDashboard {
       'Actions': () => {
         const btn = document.createElement('button');
         btn.className = 'btn btn-danger btn-small'; btn.textContent = 'Delete';
-        btn.addEventListener('click', async () => {
-          if (!confirm(`Delete ${s.name}?`)) return;
-          try {
-            await deleteStudent(s.id);
-            await this.loadStudents();
-            this.renderStudentsTab();
-            showNotification('Student removed', 'success');
-          } catch (err) { console.error(err); showNotification('Failed to delete student', 'error'); }
+        btn.addEventListener('click', () => {
+          const content = document.createElement('div');
+          content.innerHTML = `<p>Delete <strong>${s.name}</strong>? This will permanently remove the student record.</p>`;
+          const confirmBtn = createButton('Delete', async () => {
+            try { await deleteStudent(s.id); await this.loadStudents(); this.renderStudentsTab(); showNotification('Student removed', 'success'); }
+            catch (err) { console.error(err); showNotification('Failed to delete student', 'error'); }
+            modal.remove();
+          }, { className: 'btn-danger' });
+          const cancelBtn = createButton('Cancel', () => modal.remove());
+          const modal = createModal('Confirm delete student', content, [confirmBtn, cancelBtn]);
+          document.body.appendChild(modal);
         });
         return btn;
       }
@@ -293,15 +296,22 @@ export class InstructorDashboard {
 
     document.getElementById("newSessionBtn")?.addEventListener("click", () => this.renderNewSessionForm());
     container.querySelectorAll(".delete-session").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
-        if (!confirm('Delete this session?')) return;
-        try {
-          const id = e.currentTarget.dataset.id;
-          await deleteSession(id);
-          await this.loadSessions();
-          this.renderAttendanceTab();
-          showNotification('Session deleted', 'success');
-        } catch (err) { console.error(err); showNotification('Failed to delete session', 'error'); }
+      btn.addEventListener("click", (e) => {
+        const sessionId = e.currentTarget.dataset.id;
+        const content = document.createElement('div');
+        content.innerHTML = `<p>Delete this session? This will remove attendance records for the session.</p>`;
+        const confirmBtn = createButton('Delete', async () => {
+          try {
+            await deleteSession(sessionId);
+            await this.loadSessions();
+            this.renderAttendanceTab();
+            showNotification('Session deleted', 'success');
+          } catch (err) { console.error(err); showNotification('Failed to delete session', 'error'); }
+          modal.remove();
+        }, { className: 'btn-danger' });
+        const cancelBtn = createButton('Cancel', () => modal.remove());
+        const modal = createModal('Confirm delete session', content, [confirmBtn, cancelBtn]);
+        document.body.appendChild(modal);
       });
     });
   }

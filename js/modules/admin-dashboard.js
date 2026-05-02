@@ -4,7 +4,8 @@
 import {
   initializeClasses, getClasses, getAllUsers, createClass,
   updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents,
-  deleteStudent, getUserData, createSession, getGatheringPlaceStats
+  deleteStudent, getUserData, createSession, getGatheringPlaceStats,
+  getSessionsByClass, getAttendanceBySession, deleteAttendanceSession
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
@@ -16,6 +17,7 @@ import {
   createStatCard, createButton, createInput, createSelect,
   createModal, createStatsSkeleton, createTableSkeleton
 } from './ui-utils.js';
+import { formatDate } from './ui-utils.js';
 import { renderAnalyticsTab, displayRandomQuote } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
 
@@ -387,10 +389,17 @@ export class AdminDashboard {
       'Class': this.classes.find(cls => cls.id === user.assignedClassId)?.name || '—',
       'Actions': () => {
         const btn = document.createElement('button'); btn.className = 'btn btn-danger btn-small'; btn.textContent = 'Delete';
-        btn.addEventListener('click', async () => {
-          if (!confirm('Delete this user?')) return;
-          try { await deleteUser(user.id); await this.loadUsers(); this.renderUsersTab(); showNotification('User deleted', 'success'); }
-          catch { showNotification('Failed to delete user', 'error'); }
+        btn.addEventListener('click', () => {
+          const content = document.createElement('div');
+          content.innerHTML = `<p>Delete user <strong>${user.name}</strong>? This will remove their access and profile from the system.</p>`;
+          const confirmBtn = createButton('Delete', async () => {
+            try { await deleteUser(user.id); await this.loadUsers(); this.renderUsersTab(); showNotification('User deleted', 'success'); }
+            catch { showNotification('Failed to delete user', 'error'); }
+            modal.remove();
+          }, { className: 'btn-danger' });
+          const cancelBtn = createButton('Cancel', () => modal.remove());
+          const modal = createModal('Confirm delete user', content, [confirmBtn, cancelBtn]);
+          document.body.appendChild(modal);
         });
         return btn;
       }
@@ -414,10 +423,17 @@ export class AdminDashboard {
         'Name': student.name, 'Class': cls ? cls.name : 'Unassigned',
         'Actions': () => {
           const btn = document.createElement('button'); btn.className = 'btn btn-danger btn-small'; btn.textContent = 'Delete';
-          btn.addEventListener('click', async () => {
-            if (!confirm('Delete student?')) return;
-            await deleteStudent(student.id); await this.loadStudents(); this.renderStudentsTab();
-            showNotification('Student deleted', 'success');
+          btn.addEventListener('click', () => {
+            const content = document.createElement('div');
+            content.innerHTML = `<p>Delete student <strong>${student.name}</strong>? This will permanently remove the student record.</p>`;
+            const confirmBtn = createButton('Delete', async () => {
+              try { await deleteStudent(student.id); await this.loadStudents(); this.renderStudentsTab(); showNotification('Student deleted', 'success'); }
+              catch (err) { console.error(err); showNotification('Failed to delete student', 'error'); }
+              modal.remove();
+            }, { className: 'btn-danger' });
+            const cancelBtn = createButton('Cancel', () => modal.remove());
+            const modal = createModal('Confirm delete student', content, [confirmBtn, cancelBtn]);
+            document.body.appendChild(modal);
           });
           return btn;
         }
@@ -450,6 +466,100 @@ export class AdminDashboard {
       isDemoMode: this.isDemoMode,
       emptyStateMessage: 'Attendance analytics is available after signing in as an authenticated admin.'
     });
+
+    // Add admin-only session management UI beneath analytics
+    try {
+      const sessionMgr = document.createElement('div');
+      sessionMgr.className = 'card mt-lg';
+      sessionMgr.innerHTML = `<div class="card-header">Session Management</div>`;
+
+      const body = document.createElement('div');
+      body.className = 'card-body';
+
+      const classSelect = createSelect([
+        { label: 'Select Class...', value: '' },
+        ...this.classes.map(c => ({ label: c.name, value: c.id }))
+      ], 'adminSessionClassSelect');
+
+      const loadBtn = createButton('Load Sessions', async () => {
+        const classId = classSelect.value;
+        const container = document.getElementById('adminSessionsContainer');
+        clearElement(container);
+        if (!classId) { container.innerHTML = '<p class="text-muted">Select a class to load sessions.</p>'; return; }
+        container.innerHTML = '<p class="text-muted">Loading sessions...</p>';
+        try {
+          const sessions = await getSessionsByClass(classId);
+          if (!sessions.length) { container.innerHTML = '<p class="text-muted">No sessions recorded for this class.</p>'; return; }
+
+          // Pagination
+          const pageSize = 10;
+          let currentPage = 0;
+
+          const renderPage = async () => {
+            clearElement(container);
+            const start = currentPage * pageSize;
+            const pageItems = sessions.slice(start, start + pageSize);
+            const rows = [];
+            for (const s of pageItems) {
+              const attendance = await getAttendanceBySession(s.id);
+              rows.push({
+                'Date': formatDate(s.date),
+                'Present': attendance.filter(a => a.status === 'present').length,
+                'Total': attendance.length,
+                'Actions': () => {
+                  const del = createButton('Delete', () => {
+                    const content = document.createElement('div');
+                    content.innerHTML = `<p>Delete session on <strong>${formatDate(s.date)}</strong>? This will remove attendance records.</p>`;
+                    const confirmBtn = createButton('Delete', async () => {
+                      try {
+                        await deleteAttendanceSession(s.id);
+                        showNotification('Session deleted', 'success');
+                        // reload sessions and re-render
+                        const refreshed = await getSessionsByClass(classId);
+                        sessions.length = 0; sessions.push(...refreshed);
+                        if (currentPage > Math.floor((sessions.length - 1) / pageSize)) currentPage = Math.max(0, Math.floor((sessions.length - 1) / pageSize));
+                        await renderPage();
+                      } catch (err) {
+                        console.error('Failed to delete session', err);
+                        showNotification('Failed to delete session', 'error');
+                      }
+                      modal.remove();
+                    }, { className: 'btn-danger' });
+                    const cancelBtn = createButton('Cancel', () => modal.remove());
+                    const modal = createModal('Confirm delete session', content, [confirmBtn, cancelBtn]);
+                    document.body.appendChild(modal);
+                  }, { className: 'btn-danger btn-small' });
+                  return del;
+                }
+              });
+            }
+
+            container.appendChild(createTable(['Date', 'Present', 'Total', 'Actions'], rows));
+
+            const pager = document.createElement('div');
+            pager.className = 'flex gap-md mt-md';
+            const prev = createButton('Prev', async () => { if (currentPage > 0) { currentPage -= 1; await renderPage(); } }, { className: 'btn-secondary' });
+            const next = createButton('Next', async () => { if ((currentPage + 1) * pageSize < sessions.length) { currentPage += 1; await renderPage(); } }, { className: 'btn-secondary' });
+            const info = document.createElement('div'); info.className = 'text-muted'; info.textContent = `Page ${currentPage + 1} of ${Math.max(1, Math.ceil(sessions.length / pageSize))}`;
+            pager.append(prev, info, next);
+            container.appendChild(pager);
+          };
+
+          await renderPage();
+        } catch (err) {
+          console.error('Failed to load sessions for class', classId, err);
+          container.innerHTML = '<p class="text-danger">Unable to load sessions.</p>';
+        }
+      });
+
+      body.appendChild(classSelect);
+      body.appendChild(loadBtn);
+      body.appendChild(document.createElement('div')).id = 'adminSessionsContainer';
+      sessionMgr.appendChild(body);
+      tab.appendChild(sessionMgr);
+    } catch (err) {
+      console.error('Failed to attach session management UI:', err);
+    }
   }
 
   async renderGraduationTab() {
