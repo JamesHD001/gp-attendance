@@ -167,10 +167,23 @@ export async function getStudents() {
 
   const snapshot = await getDocs(studentsRef);
 
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  // Normalize legacy/misnamed fields so UI doesn't show blanks when admins
+  // or manual DB edits used different field names.
+  return snapshot.docs.map(docSnap => {
+    const data = docSnap.data() || {};
+    // Build a normalized object but ensure the canonical Firestore doc id is preserved
+    const normalized = Object.assign({}, data);
+
+    normalized.id = docSnap.id; // always use doc id
+    normalized.name = data.name || data.fullName || data.Name || '';
+    normalized.classId = data.classId || data.class || data.class_id || '';
+    normalized.email = data.email || data.Email || '';
+    normalized.location = data.location || data.Location || '';
+    normalized.phoneNumber = data.phoneNumber || data['phone number'] || data.phone || '';
+    normalized.createdAt = data.createdAt || data.joinedAt || null;
+
+    return normalized;
+  });
 
 }
 
@@ -194,19 +207,19 @@ export async function getStudentsByClass(classId) {
 }
 
 
-export async function addStudent(name, classId, email = null) {
+export async function addStudent(name, classId, email = null, phoneNumber = null, location = null, joinedAt = null) {
 
   const studentsRef = collection(db, "students");
 
   const studentData = {
     name,
     classId,
-    createdAt: serverTimestamp()
+    createdAt: joinedAt ? Timestamp.fromDate(new Date(joinedAt)) : serverTimestamp()
   };
 
-  if (email) {
-    studentData.email = email;
-  }
+  if (email) studentData.email = email;
+  if (phoneNumber) studentData.phoneNumber = phoneNumber;
+  if (location) studentData.location = location;
 
   const docRef = await addDoc(studentsRef, studentData);
 

@@ -5,13 +5,13 @@ import {
   initializeClasses, getClasses, getAllUsers, createClass,
   updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents,
   deleteStudent, getUserData, createSession, getGatheringPlaceStats,
-  getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions
+  getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions, updateStudent
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signOut as signOutSecondaryAuth } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js';
-import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
+import { doc, setDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
 import {
   clearElement, showNotification, createTable, createCard,
   createStatCard, createButton, createInput, createSelect,
@@ -500,42 +500,150 @@ export class AdminDashboard {
     const rows = this.students.map(student => {
       const cls = this.classes.find(c => c.id === student.classId);
       return {
-        'Name': student.name, 'Class': cls ? cls.name : 'Unassigned',
+        'Name': student.name || '—',
+        'Class': cls ? cls.name : 'Unassigned',
+        'Email': student.email || '—',
+        'Phone': student.phoneNumber || '—',
+        'Location': student.location || '—',
+        'Joined': student.createdAt ? (typeof student.createdAt.toDate === 'function' ? formatDate(student.createdAt) : student.createdAt) : '—',
         'Actions': () => {
-          const btn = document.createElement('button'); btn.className = 'btn btn-danger btn-small'; btn.textContent = 'Delete';
-          btn.addEventListener('click', () => {
+          const wrap = document.createElement('div');
+          wrap.style.display = 'flex';
+          wrap.style.gap = '0.5rem';
+
+          const editBtn = createButton('Edit', () => this.showEditStudentModal(student), { className: 'btn-secondary btn-small' });
+
+          const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger btn-small'; delBtn.textContent = 'Delete';
+          delBtn.addEventListener('click', () => {
             const content = document.createElement('div');
             content.innerHTML = `<p>Delete student <strong>${student.name}</strong>? This will permanently remove the student record.</p>`;
             const confirmBtn = createButton('Delete', async () => {
-              try { await deleteStudent(student.id); await this.loadStudents(); this.renderStudentsTab(); showNotification('Student deleted', 'success'); }
-              catch (err) { console.error(err); showNotification('Failed to delete student', 'error'); }
+              try {
+                if (!student.id) {
+                  showNotification('Student record has no valid id; refreshing list.', 'warning');
+                  await this.loadStudents();
+                  this.renderStudentsTab();
+                  modal.remove();
+                  return;
+                }
+                await deleteStudent(student.id);
+                await this.loadStudents();
+                this.renderStudentsTab();
+                showNotification('Student deleted', 'success');
+              } catch (err) {
+                console.error(err);
+                await this.loadStudents();
+                this.renderStudentsTab();
+                showNotification('Failed to delete student', 'error');
+              }
               modal.remove();
             }, { className: 'btn-danger' });
             const cancelBtn = createButton('Cancel', () => modal.remove());
             const modal = createModal('Confirm delete student', content, [confirmBtn, cancelBtn]);
             document.body.appendChild(modal);
           });
-          return btn;
+
+          wrap.appendChild(editBtn);
+          wrap.appendChild(delBtn);
+          return wrap;
         }
       };
     });
-    tab.appendChild(createTable(['Name', 'Class', 'Actions'], rows));
+    tab.appendChild(createTable(['Name', 'Class', 'Email', 'Phone', 'Location', 'Joined', 'Actions'], rows));
     document.getElementById('addStudentBtn')?.addEventListener('click', () => this.showAddStudentModal());
   }
 
   showAddStudentModal() {
     const nameInput = createInput('text', 'Student Name', 'studentName');
+    const emailInput = createInput('email', 'Email (optional)', 'studentEmail');
+    const phoneInput = createInput('text', 'Phone number (optional)', 'studentPhone');
+    const locationInput = createInput('text', 'Ward / Location (optional)', 'studentLocation');
     const classSelect = createSelect([{ label: 'Select Class...', value: '' }, ...this.classes.map(c => ({ label: c.name, value: c.id }))], 'studentClass');
-    const form = document.createElement('div'); form.append(nameInput, classSelect);
+
+    const form = document.createElement('div');
+    form.style.display = 'flex';
+    form.style.flexDirection = 'column';
+    form.style.gap = '0.75rem';
+    form.style.padding = '0.5rem 0';
+    form.append(nameInput, emailInput, phoneInput, locationInput, classSelect);
+
     let modal;
     const createBtn = createButton('Add Student', async () => {
-      const name = (nameInput.value || '').trim(); const classId = classSelect.value;
-      if (!name || !classId) { showNotification('Fill all fields', 'warning'); return; }
-      try { await addStudent(name, classId); modal.remove(); await this.loadStudents(); this.renderStudentsTab(); showNotification('Student added', 'success'); }
+      const name = (nameInput.value || '').trim();
+      const classId = classSelect.value;
+      const email = (emailInput.value || '').trim() || null;
+      const phone = (phoneInput.value || '').trim() || null;
+      const location = (locationInput.value || '').trim() || null;
+      if (!name || !classId) { showNotification('Please provide student name and class', 'warning'); return; }
+      try {
+        await addStudent(name, classId, email, phone, location);
+        modal.remove();
+        await this.loadStudents();
+        this.renderStudentsTab();
+        showNotification('Student added', 'success');
+      }
       catch (err) { console.error(err); showNotification('Failed to add student', 'error'); }
     });
     const cancelBtn = createButton('Cancel', () => modal.remove());
     modal = createModal('Add Student', form, [createBtn, cancelBtn]);
+    document.body.appendChild(modal);
+  }
+
+  showEditStudentModal(student) {
+    const nameInput = createInput('text', 'Student Name', 'editStudentName');
+    nameInput.value = student.name || '';
+    const emailInput = createInput('email', 'Email', 'editStudentEmail');
+    emailInput.value = student.email || '';
+    const phoneInput = createInput('text', 'Phone number', 'editStudentPhone');
+    phoneInput.value = student.phoneNumber || '';
+    const locationInput = createInput('text', 'Ward / Location', 'editStudentLocation');
+    locationInput.value = student.location || '';
+
+    const classSelect = createSelect([{ label: 'Select Class...', value: '' }, ...this.classes.map(c => ({ label: c.name, value: c.id }))], 'editStudentClass');
+    classSelect.value = student.classId || '';
+
+    const joinedInput = createInput('date', 'Joined date', 'editStudentJoined');
+    try {
+      if (student.createdAt && typeof student.createdAt.toDate === 'function') {
+        const d = student.createdAt.toDate();
+        const yyyy = d.getFullYear(); const mm = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0');
+        joinedInput.value = `${yyyy}-${mm}-${dd}`;
+      } else if (student.createdAt) {
+        const parsed = new Date(student.createdAt);
+        if (!isNaN(parsed.getTime())) {
+          const yyyy = parsed.getFullYear(); const mm = String(parsed.getMonth()+1).padStart(2,'0'); const dd = String(parsed.getDate()).padStart(2,'0');
+          joinedInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+      }
+    } catch (e) {}
+
+    const form = document.createElement('div');
+    form.style.display = 'flex'; form.style.flexDirection = 'column'; form.style.gap = '0.75rem';
+    form.append(nameInput, emailInput, phoneInput, locationInput, classSelect, joinedInput);
+
+    const saveBtn = createButton('Save', async () => {
+      const updates = {};
+      const name = (nameInput.value||'').trim(); if (name) updates.name = name;
+      const email = (emailInput.value||'').trim(); if (email) updates.email = email;
+      const phone = (phoneInput.value||'').trim(); if (phone) updates.phoneNumber = phone;
+      const location = (locationInput.value||'').trim(); if (location) updates.location = location;
+      const classId = classSelect.value; if (classId) updates.classId = classId;
+      const joined = joinedInput.value; if (joined) updates.createdAt = Timestamp.fromDate(new Date(joined));
+
+      try {
+        await updateStudent(student.id, updates);
+        showNotification('Student updated', 'success');
+        await this.loadStudents();
+        this.renderStudentsTab();
+      } catch (err) {
+        console.error('Failed to update student', err);
+        showNotification('Failed to update student', 'error');
+      }
+      modal.remove();
+    }, { className: 'btn-primary' });
+
+    const cancelBtn = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
+    const modal = createModal('Edit Student', form, [saveBtn, cancelBtn]);
     document.body.appendChild(modal);
   }
 

@@ -2,15 +2,16 @@ import { db } from '../firebase-config.js';
 import { AuthService } from './auth.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
 import {
-  getStudentsByClass, addStudent, deleteStudent,
+  getStudentsByClass, addStudent, deleteStudent, updateStudent,
   getSessionsByClass, createSession, deleteSession,
   getAttendanceBySession, getClassById,
   getPerformanceRatingsByClass, savePerformanceRating
 } from './firestore.js';
 import {
   formatDate, createTable, createTableSkeleton,
-  clearElement, showNotification, createModal, createButton
+  clearElement, showNotification, createModal, createButton, createInput, createSelect
 } from './ui-utils.js';
+import { Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
 import { renderAnalyticsTab } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
 
@@ -206,6 +207,12 @@ export class InstructorDashboard {
     const emailInput = document.createElement('input');
     emailInput.type = 'email'; emailInput.placeholder = 'Email (optional)'; emailInput.className = 'form-input'; emailInput.style.flex = '1';
 
+    const phoneInput = document.createElement('input');
+    phoneInput.type = 'text'; phoneInput.placeholder = 'Phone (optional)'; phoneInput.className = 'form-input'; phoneInput.style.flex = '1';
+
+    const locationInput = document.createElement('input');
+    locationInput.type = 'text'; locationInput.placeholder = 'Ward / Location (optional)'; locationInput.className = 'form-input'; locationInput.style.flex = '1';
+
     const addBtn = document.createElement('button');
     addBtn.textContent = 'Add Student'; addBtn.className = 'btn btn-primary';
     addBtn.addEventListener('click', async () => {
@@ -213,9 +220,11 @@ export class InstructorDashboard {
       if (!name) { showNotification('Student name is required', 'warning'); return; }
       addBtn.disabled = true;
       try {
-        const email = (emailInput.value || '').trim();
-        await addStudent(name, this.assignedClass, email || null);
-        nameInput.value = ''; emailInput.value = '';
+        const email = (emailInput.value || '').trim() || null;
+        const phone = (phoneInput.value || '').trim() || null;
+        const location = (locationInput.value || '').trim() || null;
+        await addStudent(name, this.assignedClass, email, phone, location);
+        nameInput.value = ''; emailInput.value = ''; phoneInput.value = ''; locationInput.value = '';
         await this.loadStudents();
         this.renderStudentsTab();
         showNotification('Student added successfully', 'success');
@@ -225,7 +234,7 @@ export class InstructorDashboard {
       } finally { addBtn.disabled = false; }
     });
 
-    formWrap.append(nameInput, emailInput, addBtn);
+    formWrap.append(nameInput, emailInput, phoneInput, locationInput, addBtn);
     container.appendChild(formWrap);
 
     if (this.isLoading) {
@@ -242,12 +251,21 @@ export class InstructorDashboard {
     }
 
     const rows = this.students.map(s => ({
-      'Name': s.name,
+      'Name': s.name || '—',
+      'Class': this.assignedClassName || '—',
       'Email': s.email || '—',
+      'Phone': s.phoneNumber || '—',
+      'Location': s.location || '—',
+      'Joined': s.createdAt ? (typeof s.createdAt.toDate === 'function' ? formatDate(s.createdAt) : s.createdAt) : '—',
       'Actions': () => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-danger btn-small'; btn.textContent = 'Delete';
-        btn.addEventListener('click', () => {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'flex'; wrap.style.gap = '0.5rem';
+
+        const editBtn = createButton('Edit', () => this.showEditStudentModal(s), { className: 'btn-secondary btn-small' });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-danger btn-small'; delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', () => {
           const content = document.createElement('div');
           content.innerHTML = `<p>Delete <strong>${s.name}</strong>? This will permanently remove the student record.</p>`;
           const confirmBtn = createButton('Delete', async () => {
@@ -259,10 +277,66 @@ export class InstructorDashboard {
           const modal = createModal('Confirm delete student', content, [confirmBtn, cancelBtn]);
           document.body.appendChild(modal);
         });
-        return btn;
+
+        wrap.appendChild(editBtn);
+        wrap.appendChild(delBtn);
+        return wrap;
       }
     }));
-    container.appendChild(createTable(['Name', 'Email', 'Actions'], rows));
+    container.appendChild(createTable(['Name','Class','Email','Phone','Location','Joined','Actions'], rows));
+  }
+
+  showEditStudentModal(student) {
+    const nameInput = createInput('text', 'Student Name', 'instrEditName');
+    nameInput.value = student.name || '';
+    const emailInput = createInput('email', 'Email', 'instrEditEmail');
+    emailInput.value = student.email || '';
+    const phoneInput = createInput('text', 'Phone number', 'instrEditPhone');
+    phoneInput.value = student.phoneNumber || '';
+    const locationInput = createInput('text', 'Ward / Location', 'instrEditLocation');
+    locationInput.value = student.location || '';
+
+    const joinedInput = createInput('date', 'Joined date', 'instrEditJoined');
+    try {
+      if (student.createdAt && typeof student.createdAt.toDate === 'function') {
+        const d = student.createdAt.toDate();
+        const yyyy = d.getFullYear(); const mm = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0');
+        joinedInput.value = `${yyyy}-${mm}-${dd}`;
+      } else if (student.createdAt) {
+        const parsed = new Date(student.createdAt);
+        if (!isNaN(parsed.getTime())) {
+          const yyyy = parsed.getFullYear(); const mm = String(parsed.getMonth()+1).padStart(2,'0'); const dd = String(parsed.getDate()).padStart(2,'0');
+          joinedInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+      }
+    } catch (e) {}
+
+    const form = document.createElement('div'); form.style.display='flex'; form.style.flexDirection='column'; form.style.gap='0.75rem';
+    form.append(nameInput, emailInput, phoneInput, locationInput, joinedInput);
+
+    const saveBtn = createButton('Save', async () => {
+      const updates = {};
+      const name = (nameInput.value||'').trim(); if (name) updates.name = name;
+      const email = (emailInput.value||'').trim(); if (email) updates.email = email;
+      const phone = (phoneInput.value||'').trim(); if (phone) updates.phoneNumber = phone;
+      const location = (locationInput.value||'').trim(); if (location) updates.location = location;
+      const joined = joinedInput.value; if (joined) updates.createdAt = Timestamp.fromDate(new Date(joined));
+
+      try {
+        await updateStudent(student.id, updates);
+        showNotification('Student updated', 'success');
+        await this.loadStudents();
+        this.renderStudentsTab();
+      } catch (err) {
+        console.error('Failed to update student', err);
+        showNotification('Failed to update student', 'error');
+      }
+      modal.remove();
+    }, { className: 'btn-primary' });
+
+    const cancelBtn = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
+    const modal = createModal('Edit Student', form, [saveBtn, cancelBtn]);
+    document.body.appendChild(modal);
   }
 
   /* ---- ATTENDANCE TAB ---- */
