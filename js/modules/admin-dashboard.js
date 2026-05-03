@@ -257,6 +257,39 @@ export class AdminDashboard {
 
     let currentIndex = 0;
 
+    // Prompt admin to choose the session date once before iterating classes
+    const chooseSessionDate = () => new Promise((resolve) => {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const defaultDate = `${yyyy}-${mm}-${dd}`;
+
+      const input = createInput('date', '', 'markAttendanceDate', { value: defaultDate });
+      const wrapper = document.createElement('div');
+      const label = document.createElement('p');
+      label.className = 'text-muted';
+      label.textContent = 'Select the date for the attendance sessions you are about to record.';
+      wrapper.append(label, input);
+
+      const startBtn = createButton('Start', () => {
+        const v = input.value || defaultDate;
+        modal.remove();
+        resolve(v);
+      }, { className: 'btn-primary' });
+
+      const cancelBtn = createButton('Cancel', () => {
+        modal.remove();
+        resolve(null);
+      }, { className: 'btn-secondary' });
+
+      const modal = createModal('Select session date', wrapper, [startBtn, cancelBtn]);
+      document.body.appendChild(modal);
+    });
+
+    const sessionDate = await chooseSessionDate();
+    if (!sessionDate) return; // user cancelled
+
     const showForClass = async (cls) => {
       const students = allStudents.filter(s => s.classId === cls.id);
       const container = document.createElement('div');
@@ -275,12 +308,12 @@ export class AdminDashboard {
         container.appendChild(list);
       }
 
-      const nextBtn = createButton(currentIndex < classes.length - 1 ? 'Save and Next' : 'Save', async () => {
+        const nextBtn = createButton(currentIndex < classes.length - 1 ? 'Save and Next' : 'Save', async () => {
         // collect records
         if (students.length) {
           const records = students.map(st => ({ studentId: st.id, status: document.getElementById(`att_${cls.id}_${st.id}`).checked ? 'present' : 'absent' }));
           try {
-            await createSession({ classId: cls.id, date: new Date().toISOString(), records, createdBy: this.currentUser?.uid });
+            await createSession({ classId: cls.id, date: sessionDate, records, createdBy: this.currentUser?.uid });
             showNotification(`Saved attendance for ${cls.name}`, 'success');
           } catch (err) {
             console.error('Failed to save attendance for class', cls.id, err);
