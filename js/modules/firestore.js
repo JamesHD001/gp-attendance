@@ -237,7 +237,7 @@ export async function deleteStudent(studentId) {
    ATTENDANCE SESSIONS
 =========================== */
 
-export async function createAttendanceSession(classId, date, createdBy) {
+export async function createAttendanceSession(classId, date, createdBy, summary = null) {
 
   const sessionsRef = collection(db, "attendanceSessions");
 
@@ -248,11 +248,20 @@ export async function createAttendanceSession(classId, date, createdBy) {
     createdAt: serverTimestamp()
   };
 
+  // Support an optional summary payload for general (GP) attendance
+  if (summary && typeof summary === 'object') {
+    if (typeof summary.present === 'number') sessionData.summaryPresent = Number(summary.present);
+    if (typeof summary.absent === 'number') sessionData.summaryAbsent = Number(summary.absent);
+    if (typeof summary.total === 'number') sessionData.summaryTotal = Number(summary.total);
+    sessionData.isGeneral = true;
+  }
+
   const docRef = await addDoc(sessionsRef, sessionData);
 
   return docRef.id;
 
 }
+
 
 
 export async function getSessionsByClass(classId) {
@@ -521,7 +530,10 @@ export async function createSession(payload) {
   const date = payload.date || new Date().toISOString();
   const createdBy = payload.createdBy || (payload.createdBy === undefined ? '' : payload.createdBy);
 
-  const sessionId = await createAttendanceSession(classId, date, createdBy);
+  // Support general summary payloads (admin marking general attendance)
+  const generalSummary = payload.generalSummary || payload.summary || null;
+
+  const sessionId = await createAttendanceSession(classId, date, createdBy, generalSummary);
 
   if (Array.isArray(payload.records)) {
     for (const r of payload.records) {
@@ -759,9 +771,26 @@ export async function getGatheringPlaceStats() {
   const recordsSnapshot = await getDocs(recordsRef);
   const records = recordsSnapshot.docs.map(doc => doc.data());
 
-  const totalPresent = records.filter(r => r.status === 'present').length;
-  const totalAbsent = records.filter(r => r.status === 'absent').length;
-  const totalRecords = records.length;
+  // Base counts from individual attendance records
+  let totalPresent = records.filter(r => r.status === 'present').length;
+  let totalAbsent = records.filter(r => r.status === 'absent').length;
+  let totalRecords = records.length;
+
+  // Include summary counts stored on general sessions (session-level summaries)
+  for (const s of sessions) {
+    if (s && s.isGeneral) {
+      if (typeof s.summaryPresent === 'number') {
+        totalPresent += Number(s.summaryPresent);
+      }
+      if (typeof s.summaryAbsent === 'number') {
+        totalAbsent += Number(s.summaryAbsent);
+      }
+      if (typeof s.summaryTotal === 'number') {
+        totalRecords += Number(s.summaryTotal);
+      }
+    }
+  }
+
   const overallRate = totalRecords === 0 ? 0 : Math.round((totalPresent / totalRecords) * 100);
 
   return {
@@ -773,6 +802,13 @@ export async function getGatheringPlaceStats() {
     totalRecords,
     overallRate
   };
+}
+
+export async function getGeneralSessions() {
+  const sessionsRef = collection(db, 'attendanceSessions');
+  const q = query(sessionsRef, where('isGeneral', '==', true), orderBy('date', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
 // Get next scheduled class dates based on gathering place schedule

@@ -5,7 +5,7 @@ import {
   initializeClasses, getClasses, getAllUsers, createClass,
   updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents,
   deleteStudent, getUserData, createSession, getGatheringPlaceStats,
-  getSessionsByClass, getAttendanceBySession, deleteAttendanceSession
+  getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
@@ -220,6 +220,7 @@ export class AdminDashboard {
     attendRow.innerHTML = `
       <div>
         <button id="markAllAttendanceBtn" class="btn btn-primary">Mark Attendance (All Classes)</button>
+        <button id="markGeneralAttendanceBtn" class="btn btn-outline">Mark General Attendance</button>
       </div>
     `;
     tab.appendChild(attendRow);
@@ -246,6 +247,7 @@ export class AdminDashboard {
 
     // Wire up mark attendance button
     document.getElementById('markAllAttendanceBtn')?.addEventListener('click', () => this.showMarkAttendanceModal());
+    document.getElementById('markGeneralAttendanceBtn')?.addEventListener('click', () => this.showMarkGeneralAttendanceModal());
   }
 
   async showMarkAttendanceModal() {
@@ -334,6 +336,52 @@ export class AdminDashboard {
 
     // Start with first class
     await showForClass(classes[currentIndex]);
+  }
+
+  async showMarkGeneralAttendanceModal() {
+    // Admin can record a general (gathering place) attendance summary: present & absent counts
+    const chooseSessionDateAndCounts = () => new Promise((resolve) => {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const defaultDate = `${yyyy}-${mm}-${dd}`;
+
+      const dateInput = createInput('date', '', 'generalAttendanceDate', { value: defaultDate });
+      const presentInput = createInput('number', 'Present Count', 'generalPresent', { value: 0, min: 0 });
+      const absentInput = createInput('number', 'Absent Count', 'generalAbsent', { value: 0, min: 0 });
+
+      const wrapper = document.createElement('div');
+      const p = document.createElement('p'); p.className = 'text-muted'; p.textContent = 'Record a general attendance summary for the gathering place.';
+      wrapper.append(p, dateInput, presentInput, absentInput);
+
+      const saveBtn = createButton('Save', () => {
+        const date = dateInput.value || defaultDate;
+        const present = Math.max(0, Number(presentInput.value) || 0);
+        const absent = Math.max(0, Number(absentInput.value) || 0);
+        const total = present + absent;
+        modal.remove();
+        resolve({ date, present, absent, total });
+      }, { className: 'btn-primary' });
+
+      const cancelBtn = createButton('Cancel', () => { modal.remove(); resolve(null); }, { className: 'btn-secondary' });
+
+      const modal = createModal('Mark General Attendance', wrapper, [saveBtn, cancelBtn]);
+      document.body.appendChild(modal);
+    });
+
+    const result = await chooseSessionDateAndCounts();
+    if (!result) return;
+
+    try {
+      await createSession({ classId: 'GENERAL', date: result.date, createdBy: this.currentUser?.uid, generalSummary: { present: result.present, absent: result.absent, total: result.total } });
+      showNotification('General attendance recorded', 'success');
+      // refresh overview stats
+      this.renderOverviewTab();
+    } catch (err) {
+      console.error('Failed to create general attendance session', err);
+      showNotification('Failed to record general attendance', 'error');
+    }
   }
 
   getInstructorForClass(classRecord) {
@@ -589,6 +637,63 @@ export class AdminDashboard {
       body.appendChild(document.createElement('div')).id = 'adminSessionsContainer';
       sessionMgr.appendChild(body);
       tab.appendChild(sessionMgr);
+      // General sessions manager (admin-only)
+      const generalMgr = document.createElement('div');
+      generalMgr.className = 'card mt-lg';
+      generalMgr.innerHTML = `<div class="card-header">General (Gathering Place) Sessions</div>`;
+      const gbody = document.createElement('div');
+      gbody.className = 'card-body';
+
+      const loadGeneralBtn = createButton('Load General Sessions', async () => {
+        const container = document.getElementById('adminGeneralSessionsContainer');
+        clearElement(container);
+        container.innerHTML = '<p class="text-muted">Loading general sessions...</p>';
+        try {
+          const sessions = await getGeneralSessions();
+          if (!sessions.length) { container.innerHTML = '<p class="text-muted">No general sessions recorded.</p>'; return; }
+
+          const rows = sessions.map(s => ({
+            'Date': formatDate(s.date),
+            'Present': s.summaryPresent ?? '-',
+            'Absent': s.summaryAbsent ?? '-',
+            'Total': s.summaryTotal ?? '-',
+            'Actions': () => {
+              const del = createButton('Delete', () => {
+                const content = document.createElement('div');
+                content.innerHTML = `<p>Delete general session on <strong>${formatDate(s.date)}</strong>? This will remove the session record.</p>`;
+                const confirmBtn = createButton('Delete', async () => {
+                  try {
+                    await deleteAttendanceSession(s.id);
+                    showNotification('Session deleted', 'success');
+                    // Reload list
+                    loadGeneralBtn.click();
+                  } catch (err) {
+                    console.error('Failed to delete general session', err);
+                    showNotification('Failed to delete session', 'error');
+                  }
+                  modal.remove();
+                }, { className: 'btn-danger' });
+                const cancelBtn = createButton('Cancel', () => modal.remove());
+                const modal = createModal('Confirm delete session', content, [confirmBtn, cancelBtn]);
+                document.body.appendChild(modal);
+              }, { className: 'btn-danger btn-small' });
+              return del;
+            }
+          }));
+
+          container.appendChild(createTable(['Date', 'Present', 'Absent', 'Total', 'Actions'], rows));
+        } catch (err) {
+          console.error('Failed to load general sessions', err);
+          container.innerHTML = '<p class="text-danger">Unable to load general sessions.</p>';
+        }
+      });
+
+      gbody.appendChild(loadGeneralBtn);
+      const generalContainer = document.createElement('div');
+      generalContainer.id = 'adminGeneralSessionsContainer';
+      gbody.appendChild(generalContainer);
+      generalMgr.appendChild(gbody);
+      tab.appendChild(generalMgr);
     } catch (err) {
       console.error('Failed to attach session management UI:', err);
     }
