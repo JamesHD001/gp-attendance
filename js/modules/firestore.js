@@ -30,10 +30,10 @@ export async function getClasses() {
 
   const snapshot = await getDocs(classesRef);
 
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  return snapshot.docs.map(doc => {
+    const d = doc.data() || {};
+    return Object.assign({}, d, { id: doc.id });
+  });
 
 }
 
@@ -114,10 +114,10 @@ export async function getAllUsers() {
 
   const snapshot = await getDocs(usersRef);
 
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  return snapshot.docs.map(doc => {
+    const d = doc.data() || {};
+    return Object.assign({}, d, { id: doc.id });
+  });
 
 }
 
@@ -199,10 +199,19 @@ export async function getStudentsByClass(classId) {
 
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  return snapshot.docs.map(doc => {
+    const d = doc.data() || {};
+    // Normalize legacy/misnamed fields similar to getStudents
+    const normalized = Object.assign({}, d);
+    normalized.id = doc.id;
+    normalized.name = d.name || d.fullName || d.Name || '';
+    normalized.classId = d.classId || d.class || d.class_id || '';
+    normalized.email = d.email || d.Email || '';
+    normalized.location = d.location || d.Location || '';
+    normalized.phoneNumber = d.phoneNumber || d['phone number'] || d.phone || '';
+    normalized.createdAt = d.createdAt || d.joinedAt || null;
+    return normalized;
+  });
 
 }
 
@@ -230,17 +239,18 @@ export async function addStudent(name, classId, email = null, phoneNumber = null
 
 export async function updateStudent(studentId, updates) {
 
+  if (!studentId) throw new Error('updateStudent: missing studentId');
   const studentRef = doc(db, "students", studentId);
-
-  await updateDoc(studentRef, updates);
+  // Use setDoc with merge to be tolerant of missing documents and create/merge fields
+  await setDoc(studentRef, updates, { merge: true });
 
 }
 
 
 export async function deleteStudent(studentId) {
 
+  if (!studentId) throw new Error('deleteStudent: missing studentId');
   const studentRef = doc(db, "students", studentId);
-
   await deleteDoc(studentRef);
 
 }
@@ -289,10 +299,10 @@ export async function getSessionsByClass(classId) {
 
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  return snapshot.docs.map(doc => {
+    const d = doc.data() || {};
+    return Object.assign({}, d, { id: doc.id });
+  });
 
 }
 
