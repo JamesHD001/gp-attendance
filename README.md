@@ -182,31 +182,31 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Allow read/write only to authenticated users
     match /users/{userId} {
-      allow read, write: if request.auth.uid == userId || 
+      allow read, write: if request.auth.uid == userId ||
                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
-    
+
     match /classes/{classId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
-    
+
     match /students/{studentId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && (
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassId == 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassId ==
           get(/databases/$(database)/documents/students/$(studentId)).data.classId
       );
     }
-    
+
     match /attendanceSessions/{sessionId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && (
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'leader'
       );
     }
-    
+
     match /attendanceRecords/{recordId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && (

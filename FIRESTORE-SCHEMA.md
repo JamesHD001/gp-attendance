@@ -60,8 +60,8 @@ This document describes the recommended Firestore collections, documents, and fi
 
 ## Index Recommendations
 
-- Index `students` by `classId` for efficient class lookups.  
-- Index `attendanceRecords` by `sessionId` for session lookups.  
+- Index `students` by `classId` for efficient class lookups.
+- Index `attendanceRecords` by `sessionId` for session lookups.
 - Optional: composite index for `attendanceSessions` on (`classId`, `date`) to query sessions in date order.
 - Index `performanceRatings` by `classId` for class graduation/performance views.
 
@@ -71,8 +71,8 @@ This document describes the recommended Firestore collections, documents, and fi
 
 ## Security / Rules guidance
 
-- Enforce server-side security with Firestore Security Rules.  
-- Provide read access to authenticated users where needed and restrict writes to admins or instructors scoped to their class.  
+- Enforce server-side security with Firestore Security Rules.
+- Provide read access to authenticated users where needed and restrict writes to admins or instructors scoped to their class.
 
 ## Recommendations / Migration Notes
 

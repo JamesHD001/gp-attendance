@@ -7,7 +7,8 @@
     "dedupe-classes": "node scripts/dedupe-classes.js",
     "test:rules": "node scripts/run-rules-test.js",
     "test:ui": "node scripts/run-ui-test.js",
-    "test:auth": "node scripts/run-auth-test.js"
+    "test:auth": "node scripts/run-auth-test.js",
+    "format:ws": "node scripts/format-whitespace.js"
   },
   "engines": {
     "node": ">=14"

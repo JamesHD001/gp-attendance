@@ -48,7 +48,7 @@ Notes:
 
 ## Why this approach
 
-- Keeps real API keys out of the repo and prevents accidental commits.  
+- Keeps real API keys out of the repo and prevents accidental commits.
 - Simple workflow for local development: edit `.env` once, generate, and the app will pick it up.
 
 ## NPM helper

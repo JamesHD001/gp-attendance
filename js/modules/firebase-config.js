@@ -2,16 +2,16 @@
 // This file contains the Firebase SDK initialization
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-app.js';
-import { 
-  getAuth, 
+import {
+  getAuth,
   setPersistence,
   browserSessionPersistence,
   inMemoryPersistence,
-  signOut as firebaseSignOut 
+  signOut as firebaseSignOut
 } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js';
 
-import { 
-  getFirestore 
+import {
+  getFirestore
 } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
 
 // Firebase configuration

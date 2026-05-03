@@ -13,7 +13,7 @@
   --warning-orange: #f0ad4e;
   --text-dark: #333333;
   --text-light: #666666;
-  
+
   /* Spacing */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
@@ -21,11 +21,11 @@
   --spacing-lg: 16px;
   --spacing-xl: 24px;
   --spacing-2xl: 32px;
-  
+
   /* Border */
   --border-radius: 3px;
   --border-width: 1px;
-  
+
   /* Transitions */
   --transition: all 0.3s ease;
 }

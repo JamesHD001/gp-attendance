@@ -35,7 +35,7 @@ The emulator will attempt to load `firestore.rules` from the project root. Synta
 
 1. Use the Firebase Console Rules Playground to simulate reads/writes:
 
-- Go to the Firebase Console → Firestore → Rules → "Rules playground".  
+- Go to the Firebase Console → Firestore → Rules → "Rules playground".
 - Choose an authenticated user (set `request.auth.uid`) and simulate reads/writes against your paths and documents to verify access.
 
 1. Deploy the rules to your Firebase project (once validated):
@@ -55,6 +55,6 @@ node test/firestore-rules.test.js   # your test runner script, using the library
 
 Notes & recommendations
 
-- Always validate changes with the emulator or the console simulator before deploying production rules.  
-- Keep a copy of the current `firestore.rules` backed up or versioned (git) before making large changes.  
+- Always validate changes with the emulator or the console simulator before deploying production rules.
+- Keep a copy of the current `firestore.rules` backed up or versioned (git) before making large changes.
 - The repo already contains `firestore.rules` at the project root — use that file when testing or deploying.

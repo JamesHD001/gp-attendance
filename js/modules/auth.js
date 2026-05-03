@@ -345,7 +345,7 @@ export class AuthService {
       window.location.href = new URL(idx, window.location.href).href;
       return false;
     }
-  
+
     try {
       const sessionIsActive = await AuthService.ensureSessionActive(user);
 
@@ -355,7 +355,7 @@ export class AuthService {
       }
 
       const role = await getUserRole(user.uid);
-  
+
       if (role !== expectedRole) {
         AuthService.stopSessionMonitoring();
         await AuthService.redirectBasedOnRole(user);
@@ -364,7 +364,7 @@ export class AuthService {
 
       await AuthService.beginSessionMonitoring(user);
       return true;
-  
+
     } catch (error) {
       console.error("Role error:", error);
       const idx = AuthService.getIndexPath();

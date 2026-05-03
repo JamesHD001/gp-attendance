@@ -19,7 +19,6 @@ import {
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
 
-
 /* ===========================
    CLASS OPERATIONS
 =========================== */
@@ -37,7 +36,6 @@ export async function getClasses() {
 
 }
 
-
 export async function getClassById(classId) {
 
   const classRef = doc(db, "classes", classId);
@@ -52,7 +50,6 @@ export async function getClassById(classId) {
   };
 
 }
-
 
 export async function updateClassLockStatus(classId, isLocked) {
 
@@ -74,7 +71,6 @@ export async function updateClassInstructor(classId, instructorId = "") {
 
 }
 
-
 /* ===========================
    USER OPERATIONS
 =========================== */
@@ -91,7 +87,6 @@ export async function getUserRole(uid) {
 
 }
 
-
 export async function getUserData(uid) {
 
   const userRef = doc(db, "users", uid);
@@ -107,7 +102,6 @@ export async function getUserData(uid) {
 
 }
 
-
 export async function getAllUsers() {
 
   const usersRef = collection(db, "users");
@@ -120,7 +114,6 @@ export async function getAllUsers() {
   });
 
 }
-
 
 export async function createUser(uid, email, name, role, assignedClassId = null) {
 
@@ -138,7 +131,6 @@ export async function createUser(uid, email, name, role, assignedClassId = null)
 
 }
 
-
 export async function updateUser(uid, updates) {
 
   const userRef = doc(db, "users", uid);
@@ -147,7 +139,6 @@ export async function updateUser(uid, updates) {
 
 }
 
-
 export async function deleteUser(uid) {
 
   const userRef = doc(db, "users", uid);
@@ -155,7 +146,6 @@ export async function deleteUser(uid) {
   await deleteDoc(userRef);
 
 }
-
 
 /* ===========================
    STUDENT OPERATIONS
@@ -187,7 +177,6 @@ export async function getStudents() {
 
 }
 
-
 export async function getStudentsByClass(classId) {
 
   const studentsRef = collection(db, "students");
@@ -215,7 +204,6 @@ export async function getStudentsByClass(classId) {
 
 }
 
-
 export async function addStudent(name, classId, email = null, phoneNumber = null, location = null, joinedAt = null) {
 
   const studentsRef = collection(db, "students");
@@ -236,7 +224,6 @@ export async function addStudent(name, classId, email = null, phoneNumber = null
 
 }
 
-
 export async function updateStudent(studentId, updates) {
 
   if (!studentId) throw new Error('updateStudent: missing studentId');
@@ -246,7 +233,6 @@ export async function updateStudent(studentId, updates) {
 
 }
 
-
 export async function deleteStudent(studentId) {
 
   if (!studentId) throw new Error('deleteStudent: missing studentId');
@@ -254,7 +240,6 @@ export async function deleteStudent(studentId) {
   await deleteDoc(studentRef);
 
 }
-
 
 /* ===========================
    ATTENDANCE SESSIONS
@@ -285,8 +270,6 @@ export async function createAttendanceSession(classId, date, createdBy, summary 
 
 }
 
-
-
 export async function getSessionsByClass(classId) {
 
   const sessionsRef = collection(db, "attendanceSessions");
@@ -306,7 +289,6 @@ export async function getSessionsByClass(classId) {
 
 }
 
-
 export async function getSessionById(sessionId) {
 
   const sessionRef = doc(db, "attendanceSessions", sessionId);
@@ -322,7 +304,6 @@ export async function getSessionById(sessionId) {
 
 }
 
-
 export async function deleteAttendanceSession(sessionId) {
 
   const sessionRef = doc(db, "attendanceSessions", sessionId);
@@ -330,7 +311,6 @@ export async function deleteAttendanceSession(sessionId) {
   await deleteDoc(sessionRef);
 
 }
-
 
 /* ===========================
    ATTENDANCE RECORDS
@@ -375,7 +355,6 @@ export async function saveAttendanceRecord(sessionId, studentId, status) {
   }
 
 }
-
 
 export async function getAttendanceBySession(sessionId) {
 
@@ -494,7 +473,6 @@ function calculateGraduationScore(attendanceRate, performanceRating) {
     graduationRate
   };
 }
-
 
 /* ===========================
    INITIALIZE DEFAULT GP CLASSES
@@ -726,9 +704,9 @@ export async function getAttendanceByTimePeriod(classId, period = 'weekly') {
   const students = await getStudentsByClass(classId);
   const sessions = await getSessionsByClass(classId);
   const now = new Date();
-  
+
   let filteredSessions = sessions;
-  
+
   if (period === 'weekly') {
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     filteredSessions = sessions.filter(s => s.date.toDate() >= oneWeekAgo);
