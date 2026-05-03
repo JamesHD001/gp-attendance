@@ -518,7 +518,6 @@ export class AdminDashboard {
         'Email': student.email || '—',
         'Phone': student.phoneNumber || '—',
         'Location': student.location || '—',
-        'Joined': student.createdAt ? (typeof student.createdAt.toDate === 'function' ? formatDate(student.createdAt) : student.createdAt) : '—',
         'Actions': () => {
           const wrap = document.createElement('div');
           wrap.style.display = 'flex';
@@ -562,7 +561,7 @@ export class AdminDashboard {
         }
       };
     });
-    tab.appendChild(createTable(['Name', 'Class', 'Email', 'Phone', 'Location', 'Joined', 'Actions'], rows));
+    tab.appendChild(createTable(['Name', 'Class', 'Email', 'Phone', 'Location', 'Actions'], rows));
     document.getElementById('addStudentBtn')?.addEventListener('click', () => this.showAddStudentModal());
   }
 

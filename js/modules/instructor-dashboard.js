@@ -268,7 +268,6 @@ export class InstructorDashboard {
       'Email': s.email || '—',
       'Phone': s.phoneNumber || '—',
       'Location': s.location || '—',
-      'Joined': s.createdAt ? (typeof s.createdAt.toDate === 'function' ? formatDate(s.createdAt) : s.createdAt) : '—',
       'Actions': () => {
         const wrap = document.createElement('div');
         wrap.style.display = 'flex'; wrap.style.gap = '0.5rem';
@@ -295,7 +294,7 @@ export class InstructorDashboard {
         return wrap;
       }
     }));
-    container.appendChild(createTable(['Name','Class','Email','Phone','Location','Joined','Actions'], rows));
+    container.appendChild(createTable(['Name','Class','Email','Phone','Location','Actions'], rows));
   }
 
   showEditStudentModal(student) {
