@@ -852,5 +852,5 @@ export function getNextClassDates(daysAhead = 30) {
     }
   }
 
-  return nextDates.slice(0, 2); // Return next 2 scheduled dates
+  return nextDates.slice(0, 4); // Return next 4 scheduled dates
 }
