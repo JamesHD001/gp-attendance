@@ -27,6 +27,8 @@ import {
 // BUG FIX (refactor): shared analytics rendering
 import { renderAnalyticsTab } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
+import { createTabSkeleton } from './ui-utils.js';
+import { createReportsSkeleton, createAnalyticsSkeleton, createGraduationSkeleton, createGraduandsSkeleton } from './ui-utils.js';
 
 export class LeaderDashboard {
 
@@ -162,6 +164,18 @@ export class LeaderDashboard {
 
     const selectedTab = document.getElementById(`${tabName}Tab`);
     if (selectedTab) selectedTab.classList.remove('hidden');
+
+      const targetTabEl = document.getElementById(`${tabName}Tab`);
+      if (targetTabEl) {
+        clearElement(targetTabEl);
+        let skeletonEl = createTabSkeleton();
+        if (tabName === 'reports') skeletonEl = createReportsSkeleton();
+        if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
+        if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
+        if (tabName === 'graduands') skeletonEl = createGraduandsSkeleton();
+        targetTabEl.appendChild(skeletonEl);
+        targetTabEl.classList.remove('hidden');
+      }
 
     // BUG FIX: event is null when navigating via sidebar links or hash changes.
     // Guard before accessing event.target to prevent an uncaught TypeError.

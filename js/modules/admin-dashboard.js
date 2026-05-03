@@ -15,8 +15,9 @@ import { doc, setDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com
 import {
   clearElement, showNotification, createTable, createCard,
   createStatCard, createButton, createInput, createSelect,
-  createModal, createStatsSkeleton, createTableSkeleton
+  createModal, createStatsSkeleton, createTableSkeleton, createTabSkeleton
 } from './ui-utils.js';
+import { createClassesSkeleton, createUsersSkeleton, createStudentsSkeleton, createAttendanceSkeleton, createAnalyticsSkeleton, createGraduationSkeleton } from './ui-utils.js';
 import { formatDate } from './ui-utils.js';
 import { renderAnalyticsTab, displayRandomQuote } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
@@ -143,7 +144,19 @@ export class AdminDashboard {
     this.currentTab = tabName;
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`${tabName}Tab`)?.classList.remove('hidden');
+    const targetTabEl = document.getElementById(`${tabName}Tab`);
+    if (targetTabEl) {
+      clearElement(targetTabEl);
+      let skeletonEl = createTabSkeleton();
+      if (tabName === 'classes') skeletonEl = createClassesSkeleton();
+      if (tabName === 'users') skeletonEl = createUsersSkeleton();
+      if (tabName === 'students') skeletonEl = createStudentsSkeleton();
+      if (tabName === 'attendance') skeletonEl = createAttendanceSkeleton();
+      if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
+      if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
+      targetTabEl.appendChild(skeletonEl);
+      targetTabEl.classList.remove('hidden');
+    }
     // FIX: null guard for hash/sidebar navigation
     if (event?.target) event.target.classList.add('active');
     if (tabName === 'classes') this.renderClassesTab();

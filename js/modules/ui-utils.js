@@ -297,6 +297,71 @@ export function createStatsSkeleton(count = 3) {
   return grid;
 }
 
+// Generic skeleton used while tab content is loading
+export function createTabSkeleton(options = {}) {
+  const {
+    statsCount = 2,
+    tableRows = 3,
+    tableColumns = 4,
+    showQuote = true
+  } = options || {};
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tab-skeleton';
+
+  if (showQuote) {
+    const header = document.createElement('div');
+    header.className = 'skeleton-header';
+    header.appendChild(createSkeletonBlock('skeleton-quote'));
+    wrapper.appendChild(header);
+  }
+
+  const sections = document.createElement('div');
+  sections.className = 'skeleton-sections';
+  sections.appendChild(createStatsSkeleton(statsCount));
+  sections.appendChild(createTableSkeleton(tableRows, tableColumns));
+  wrapper.appendChild(sections);
+
+  return wrapper;
+}
+
+// Per-tab custom skeleton components for more accurate placeholders
+export function createClassesSkeleton() {
+  return createTabSkeleton({ statsCount: 2, tableRows: 6, tableColumns: 5, showQuote: false });
+}
+
+export function createUsersSkeleton() {
+  return createTabSkeleton({ statsCount: 1, tableRows: 6, tableColumns: 4, showQuote: false });
+}
+
+export function createStudentsSkeleton() {
+  return createTabSkeleton({ statsCount: 1, tableRows: 8, tableColumns: 6, showQuote: false });
+}
+
+export function createAttendanceSkeleton() {
+  return createTabSkeleton({ statsCount: 1, tableRows: 8, tableColumns: 6, showQuote: false });
+}
+
+export function createPerformanceSkeleton() {
+  return createTabSkeleton({ statsCount: 1, tableRows: 6, tableColumns: 5, showQuote: false });
+}
+
+export function createAnalyticsSkeleton() {
+  return createTabSkeleton({ statsCount: 4, tableRows: 4, tableColumns: 4, showQuote: true });
+}
+
+export function createGraduationSkeleton() {
+  return createTabSkeleton({ statsCount: 3, tableRows: 6, tableColumns: 4, showQuote: true });
+}
+
+export function createReportsSkeleton() {
+  return createTabSkeleton({ statsCount: 1, tableRows: 10, tableColumns: 6, showQuote: false });
+}
+
+export function createGraduandsSkeleton() {
+  return createTabSkeleton({ statsCount: 1, tableRows: 6, tableColumns: 4, showQuote: false });
+}
+
 export function createTableSkeleton(rows = 4, columns = 4) {
   const wrapper = document.createElement('div');
   wrapper.className = 'table-skeleton';

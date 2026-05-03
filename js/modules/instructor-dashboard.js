@@ -9,8 +9,9 @@ import {
 } from './firestore.js';
 import {
   formatDate, createTable, createTableSkeleton,
-  clearElement, showNotification, createModal, createButton, createInput, createSelect
+  clearElement, showNotification, createModal, createButton, createInput, createSelect, createTabSkeleton
 } from './ui-utils.js';
+import { createStudentsSkeleton, createAttendanceSkeleton, createPerformanceSkeleton, createGraduationSkeleton, createAnalyticsSkeleton } from './ui-utils.js';
 import { Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
 import { renderAnalyticsTab } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
@@ -177,7 +178,18 @@ export class InstructorDashboard {
     this.currentTab = tabName;
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`${tabName}Tab`)?.classList.remove('hidden');
+    const targetTabEl = document.getElementById(`${tabName}Tab`);
+    if (targetTabEl) {
+      clearElement(targetTabEl);
+      let skeletonEl = createTabSkeleton();
+      if (tabName === 'students') skeletonEl = createStudentsSkeleton();
+      if (tabName === 'attendance') skeletonEl = createAttendanceSkeleton();
+      if (tabName === 'performance') skeletonEl = createPerformanceSkeleton();
+      if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
+      if (tabName === 'stats') skeletonEl = createAnalyticsSkeleton();
+      targetTabEl.appendChild(skeletonEl);
+      targetTabEl.classList.remove('hidden');
+    }
     // FIX: guard against null event (hash/sidebar navigation)
     if (event?.target) event.target.classList.add('active');
     if (tabName === 'students') this.renderStudentsTab();
