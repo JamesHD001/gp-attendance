@@ -62,6 +62,11 @@ export class AdminDashboard {
     // that existed at the bottom of the original file has been removed.
     AuthService.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = '../index.html'; return; }
+      try {
+        const role = await getUserData(user.uid).then(u => u?.role).catch(() => null);
+        console.debug('Admin init auth state:', { uid: user.uid, role });
+      } catch (e) {}
+
       const allowed = await AuthService.requireRole('admin');
       if (!allowed) return;
       this.currentUser = user;
