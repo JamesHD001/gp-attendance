@@ -218,9 +218,17 @@ export async function addStudent(name, classId, email = null, phoneNumber = null
   if (phoneNumber) studentData.phoneNumber = phoneNumber;
   if (location) studentData.location = location;
 
-  const docRef = await addDoc(studentsRef, studentData);
+  if (!name || !classId) {
+    throw new Error('addStudent: name and classId are required');
+  }
 
-  return docRef.id;
+  try {
+    const docRef = await addDoc(studentsRef, studentData);
+    return docRef.id;
+  } catch (err) {
+    console.error('addStudent failed', { name, classId, email, phoneNumber, location, joinedAt }, err);
+    throw err;
+  }
 
 }
 

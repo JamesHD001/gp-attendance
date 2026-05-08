@@ -594,7 +594,7 @@ export class AdminDashboard {
         this.renderStudentsTab();
         showNotification('Student added', 'success');
       }
-      catch (err) { console.error(err); showNotification('Failed to add student', 'error'); }
+      catch (err) { console.error('Add student error', err); showNotification('Failed to add student: ' + (err.message || ''), 'error'); }
     });
     const cancelBtn = createButton('Cancel', () => modal.remove());
     modal = createModal('Add Student', form, [createBtn, cancelBtn]);

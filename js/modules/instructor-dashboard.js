@@ -257,8 +257,8 @@ export class InstructorDashboard {
     if (this.students.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'text-muted';
-      empty.textContent = 'No students yet. Add one above.';
-      container.appendChild(empty);
+            console.error('Add student error', err);
+            showNotification('Failed to add student: ' + (err.message || ''), 'error');
       return;
     }
 
