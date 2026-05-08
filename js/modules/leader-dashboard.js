@@ -25,10 +25,11 @@ import {
 } from './ui-utils.js';
 
 // BUG FIX (refactor): shared analytics rendering
-import { renderAnalyticsTab } from './analytics-utils.js';
+import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
 import { createTabSkeleton } from './ui-utils.js';
-import { createReportsSkeleton, createAnalyticsSkeleton, createGraduationSkeleton, createGraduandsSkeleton } from './ui-utils.js';
+import { createClassesSkeleton, createReportsSkeleton, createAnalyticsSkeleton, createGraduationSkeleton, createGraduandsSkeleton } from './ui-utils.js';
+import { showClassParticipantsModal } from './class-participants.js';
 
 export class LeaderDashboard {
 
@@ -101,6 +102,18 @@ export class LeaderDashboard {
     }
   }
 
+  async showClassParticipants(classRecord) {
+    try {
+      const students = await getStudentsByClass(classRecord.id);
+      showClassParticipantsModal(classRecord, students, {
+        note: 'Read-only view for leaders.'
+      });
+    } catch (error) {
+      console.error('Failed to load class participants:', error);
+      showNotification('Failed to load class participants', 'error');
+    }
+  }
+
   setupEventListeners() {
     if (this.eventListenersInitialized) return;
     this.eventListenersInitialized = true;
@@ -119,7 +132,7 @@ export class LeaderDashboard {
     const navLinks = document.querySelectorAll('.nav-link');
     const mapHashToTab = (hash) => {
       if (!hash) return '';
-      const map = { overview: 'overview', reports: 'reports', analytics: 'analytics', graduation: 'graduation', graduands: 'graduands' };
+      const map = { overview: 'overview', classes: 'classes', reports: 'reports', analytics: 'analytics', graduation: 'graduation', graduands: 'graduands' };
       return map[hash.replace('#', '')] || hash.replace('#', '');
     };
 
@@ -169,6 +182,7 @@ export class LeaderDashboard {
       if (targetTabEl) {
         clearElement(targetTabEl);
         let skeletonEl = createTabSkeleton();
+        if (tabName === 'classes') skeletonEl = createClassesSkeleton();
         if (tabName === 'reports') skeletonEl = createReportsSkeleton();
         if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
         if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
@@ -181,10 +195,69 @@ export class LeaderDashboard {
     // Guard before accessing event.target to prevent an uncaught TypeError.
     if (event && event.target) event.target.classList.add('active');
 
+    if (tabName === 'classes') this.renderClassesTab();
     if (tabName === 'reports')   this.renderReportsTab();
     if (tabName === 'analytics') this.renderAnalyticsTab();
     if (tabName === 'graduation') this.renderGraduationTab();
     if (tabName === 'graduands') this.renderGraduandsTab();
+  }
+
+  async renderClassesTab() {
+    const tab = document.getElementById('classesTab');
+    clearElement(tab);
+
+    const header = document.createElement('div');
+    header.className = 'flex-between mb-lg';
+    header.innerHTML = `
+      <div>
+        <h2>Classes</h2>
+        <p class="text-muted">View participants assigned to each class.</p>
+      </div>
+    `;
+    tab.appendChild(header);
+
+    if (this.isLoading) {
+      tab.appendChild(createTableSkeleton(5, 3));
+      return;
+    }
+
+    if (!this.classes.length) {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted';
+      empty.textContent = 'No classes available.';
+      tab.appendChild(empty);
+      return;
+    }
+
+    const participantCounts = Object.fromEntries(await Promise.all(
+      this.classes.map(async classRecord => {
+        try {
+          const students = await getStudentsByClass(classRecord.id);
+          return [classRecord.id, students.length];
+        } catch (error) {
+          console.error('Failed to count class participants:', classRecord.id, error);
+          return [classRecord.id, '—'];
+        }
+      })
+    ));
+
+    const rows = this.classes.map(classRecord => ({
+      'Class Name': classRecord.name,
+      'Participants': participantCounts[classRecord.id] ?? '—',
+      'Actions': () => {
+        const viewBtn = createButton('View Participants', async () => {
+          viewBtn.disabled = true;
+          try {
+            await this.showClassParticipants(classRecord);
+          } finally {
+            viewBtn.disabled = false;
+          }
+        }, { className: 'btn-primary btn-small' });
+        return viewBtn;
+      }
+    }));
+
+    tab.appendChild(createTable(['Class Name', 'Participants', 'Actions'], rows));
   }
 
   async renderGraduandsTab() {
@@ -289,6 +362,7 @@ export class LeaderDashboard {
     tabNav.className = 'tab-navigation mb-lg';
     tabNav.innerHTML = `
       <button class="tab-btn active" data-tab="overview">Overview</button>
+      <button class="tab-btn" data-tab="classes">Classes</button>
       <button class="tab-btn" data-tab="reports">Reports</button>
       <button class="tab-btn" data-tab="analytics">Analytics</button>
       <button class="tab-btn" data-tab="graduation">Graduation</button>
@@ -299,6 +373,7 @@ export class LeaderDashboard {
     const tabContent = document.createElement('div');
     tabContent.innerHTML = `
       <div id="overviewTab"   class="tab-content"></div>
+      <div id="classesTab"    class="tab-content hidden"></div>
       <div id="reportsTab"    class="tab-content hidden"></div>
       <div id="analyticsTab"  class="tab-content hidden"></div>
       <div id="graduationTab" class="tab-content hidden"></div>
@@ -319,7 +394,7 @@ export class LeaderDashboard {
     }
 
     const statsRow = document.createElement('div');
-    statsRow.className = 'flex gap-lg flex-wrap';
+    statsRow.className = 'flex gap-lg flex-wrap mb-lg';
     statsRow.appendChild(createStatCard('Total Classes', this.classes.length));
 
     let totalStudents = 0;
@@ -337,6 +412,10 @@ export class LeaderDashboard {
     statsRow.appendChild(createStatCard('Total Students', totalStudents));
     statsRow.appendChild(createStatCard('Total Sessions', totalSessions));
     tab.appendChild(statsRow);
+
+    const quoteCard = createMotivationCard();
+    quoteCard.classList.add('mb-lg');
+    tab.appendChild(quoteCard);
 
     tab.appendChild(createCard(
       'Information',

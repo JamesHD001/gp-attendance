@@ -3,7 +3,7 @@
 
 import {
   initializeClasses, getClasses, getAllUsers, createClass,
-  updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents,
+  updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents, getStudentsByClass,
   deleteStudent, getUserData, createSession, getGatheringPlaceStats,
   getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions, updateStudent
 } from './firestore.js';
@@ -19,8 +19,9 @@ import {
 } from './ui-utils.js';
 import { createClassesSkeleton, createUsersSkeleton, createStudentsSkeleton, createAttendanceSkeleton, createAnalyticsSkeleton, createGraduationSkeleton } from './ui-utils.js';
 import { formatDate } from './ui-utils.js';
-import { renderAnalyticsTab, displayRandomQuote } from './analytics-utils.js';
+import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
+import { showClassParticipantsModal } from './class-participants.js';
 
 export class AdminDashboard {
   constructor() {
@@ -206,28 +207,19 @@ export class AdminDashboard {
       tab.appendChild(createStatsSkeleton(3));
       return;
     }
-    const stats = document.createElement('div'); stats.className = 'flex gap-lg flex-wrap';
+    const stats = document.createElement('div'); stats.className = 'flex gap-lg flex-wrap mb-lg';
     stats.appendChild(createStatCard('Classes', this.classes.length));
     stats.appendChild(createStatCard('Leaders/Instructors', this.users.length));
     stats.appendChild(createStatCard('Students', this.students.length));
     tab.appendChild(stats);
 
     // Motivation quote + simple GP analytics moved to Overview
-    const quoteCard = document.createElement('div');
-    quoteCard.className = 'card motivation-card';
-    const quoteHeading = document.createElement('h3');
-    quoteHeading.textContent = 'Daily Inspiration';
-    quoteHeading.style.marginBottom = '1rem';
-    quoteCard.appendChild(quoteHeading);
-    const quoteBox = document.createElement('div');
-    quoteBox.id = 'adminQuoteBox';
-    quoteBox.className = 'quote-box';
-    displayRandomQuote(quoteBox);
-    quoteCard.appendChild(quoteBox);
+    const quoteCard = createMotivationCard();
+    quoteCard.classList.add('mb-lg');
     tab.appendChild(quoteCard);
 
     const gpStatsCard = document.createElement('div');
-    gpStatsCard.className = 'card';
+    gpStatsCard.className = 'card mb-lg';
     gpStatsCard.style.padding = '1rem';
     gpStatsCard.innerHTML = '<h3>Gathering Place Attendance</h3><div id="gpOverviewStats">Loading...</div>';
     tab.appendChild(gpStatsCard);
@@ -408,6 +400,16 @@ export class AdminDashboard {
       || null;
   }
 
+  async showClassParticipants(classRecord) {
+    try {
+      const students = await getStudentsByClass(classRecord.id);
+      showClassParticipantsModal(classRecord, students);
+    } catch (error) {
+      console.error('Failed to load class participants:', error);
+      showNotification('Failed to load class participants', 'error');
+    }
+  }
+
   async renderClassesTab() {
     const tab = document.getElementById('classesTab'); clearElement(tab);
     const h = document.createElement('div'); h.className = 'flex-between mb-lg';
@@ -437,24 +439,42 @@ export class AdminDashboard {
         });
       }
       const instructorDisplay = instructor ? (instructor.name || instructor.email || instructor.id || 'Unknown') : (cls.instructorId ? 'Loading...' : 'Unassigned');
+      const participantsCount = this.students.filter(student => student.classId === cls.id).length;
 
       return {
         'Class Name': cls.name,
         'Instructor': instructorDisplay,
+        'Participants': participantsCount,
         'Status': cls.isLocked ? '🔒 Locked' : '🔓 Unlocked',
         'Actions': () => {
-          const btn = document.createElement('button');
-          btn.className = 'btn btn-small btn-secondary';
-          btn.textContent = cls.isLocked ? 'Unlock' : 'Lock';
-          btn.addEventListener('click', async () => {
+          const wrap = document.createElement('div');
+          wrap.style.display = 'flex';
+          wrap.style.gap = '0.5rem';
+          wrap.style.flexWrap = 'wrap';
+
+          const viewBtn = createButton('View Participants', async () => {
+            viewBtn.disabled = true;
+            try {
+              await this.showClassParticipants(cls);
+            } finally {
+              viewBtn.disabled = false;
+            }
+          }, { className: 'btn-primary btn-small' });
+
+          const lockBtn = document.createElement('button');
+          lockBtn.className = 'btn btn-small btn-secondary';
+          lockBtn.textContent = cls.isLocked ? 'Unlock' : 'Lock';
+          lockBtn.addEventListener('click', async () => {
             try { await updateClassLockStatus(cls.id, !cls.isLocked); await this.loadClasses(); this.renderClassesTab(); showNotification('Class updated', 'success'); }
             catch { showNotification('Failed to update class', 'error'); }
           });
-          return btn;
+
+          wrap.append(viewBtn, lockBtn);
+          return wrap;
         }
       };
     });
-    tab.appendChild(createTable(['Class Name', 'Instructor', 'Status', 'Actions'], rows));
+    tab.appendChild(createTable(['Class Name', 'Instructor', 'Participants', 'Status', 'Actions'], rows));
     document.getElementById('addClassBtn')?.addEventListener('click', () => this.showAddClassModal());
   }
 

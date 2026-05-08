@@ -13,7 +13,7 @@ import {
 } from './ui-utils.js';
 import { createStudentsSkeleton, createAttendanceSkeleton, createPerformanceSkeleton, createGraduationSkeleton, createAnalyticsSkeleton } from './ui-utils.js';
 import { Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
-import { renderAnalyticsTab } from './analytics-utils.js';
+import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
 import {
   getInstructorAttendanceLockState,
@@ -209,14 +209,14 @@ export class InstructorDashboard {
     const mainContent = document.querySelector('.main-content');
     if (!mainContent) return;
     mainContent.innerHTML = `
-      <header class="dashboard-header">
+      <div class="flex-between mb-xl">
         <div>
           <h1>Instructor Dashboard</h1>
-          <p>${this.userData.name || 'Instructor'} — ${this.assignedClassName} Class</p>
+          <p class="text-muted">${this.userData.name || 'Instructor'} — ${this.assignedClassName} Class</p>
         </div>
         <button id="logoutBtn" class="btn btn-secondary">Logout</button>
-      </header>
-      <nav class="dashboard-nav">
+      </div>
+      <nav class="tab-navigation mb-lg">
         <button class="tab-btn active" data-tab="students">Students</button>
         <button class="tab-btn" data-tab="attendance">Attendance</button>
         <button class="tab-btn" data-tab="performance">Performance</button>
@@ -287,6 +287,10 @@ export class InstructorDashboard {
     const heading = document.createElement('h2');
     heading.textContent = 'Students';
     container.appendChild(heading);
+
+    const quoteCard = createMotivationCard();
+    quoteCard.classList.add('mb-lg');
+    container.appendChild(quoteCard);
 
     // FIX Bug 9: proper validation + notifications, no silent failures
     const formWrap = document.createElement('div');

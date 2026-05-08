@@ -100,6 +100,24 @@ export function displayRandomQuote(container) {
   `;
 }
 
+export function createMotivationCard(title = 'Daily Inspiration') {
+  const card = document.createElement('div');
+  card.className = 'card motivation-card';
+
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  heading.style.marginBottom = '1rem';
+
+  const quoteBox = document.createElement('div');
+  quoteBox.className = 'quote-box';
+  displayRandomQuote(quoteBox);
+
+  card.appendChild(heading);
+  card.appendChild(quoteBox);
+
+  return card;
+}
+
 /**
  * Render the shared analytics tab content.
  *
