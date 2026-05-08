@@ -44,6 +44,12 @@ service cloud.firestore {
       return status in ['present', 'absent'];
     }
 
+    function instructorAttendanceWindowOpen() {
+      let lagosMinutesSinceMidnight =
+        ((request.time.toMillis() + (60 * 60 * 1000)) % (24 * 60 * 60 * 1000)) / (60 * 1000);
+      return lagosMinutesSinceMidnight < (16 * 60);
+    }
+
     function sessionDoc(sessionId) {
       return exists(/databases/$(database)/documents/attendanceSessions/$(sessionId))
         ? get(/databases/$(database)/documents/attendanceSessions/$(sessionId)).data
@@ -137,16 +143,21 @@ service cloud.firestore {
       // Instructors may create sessions for their own class and only if
       // the request resource validates the required fields.
       allow create: if isInstructor() &&
+        instructorAttendanceWindowOpen() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.classId == getUserAssignedClass(request.auth.uid) &&
         request.resource.data.date is timestamp;
 
       // Instructors may update/delete sessions they created for their class
-      allow update: if isInstructor() && resource.data.createdBy == request.auth.uid &&
+      allow update: if isInstructor() &&
+        instructorAttendanceWindowOpen() &&
+        resource.data.createdBy == request.auth.uid &&
         resource.data.classId == getUserAssignedClass(request.auth.uid) &&
         request.resource.data.classId == resource.data.classId;
 
-      allow delete: if isInstructor() && resource.data.createdBy == request.auth.uid &&
+      allow delete: if isInstructor() &&
+        instructorAttendanceWindowOpen() &&
+        resource.data.createdBy == request.auth.uid &&
         resource.data.classId == getUserAssignedClass(request.auth.uid);
     }
 
@@ -161,18 +172,21 @@ service cloud.firestore {
 
       // Instructors may create attendance records for sessions they own
       allow create: if isInstructor() &&
+        instructorAttendanceWindowOpen() &&
         isValidAttendanceStatus(request.resource.data.status) &&
         instructorOwnsSession(request.resource.data.sessionId);
 
       // Instructors may update records only if the session belongs to them
       allow update: if isInstructor() &&
+        instructorAttendanceWindowOpen() &&
         isValidAttendanceStatus(request.resource.data.status) &&
         instructorOwnsSession(resource.data.sessionId) &&
         request.resource.data.sessionId == resource.data.sessionId &&
         request.resource.data.studentId == resource.data.studentId;
 
       // Instructors may delete records only if the session belongs to them
-      allow delete: if instructorOwnsSession(resource.data.sessionId);
+      allow delete: if instructorOwnsSession(resource.data.sessionId) &&
+        instructorAttendanceWindowOpen();
     }
 
     // ====================

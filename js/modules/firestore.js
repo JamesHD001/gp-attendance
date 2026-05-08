@@ -1,7 +1,7 @@
 // Firestore Utilities Module
 // Handles all Firestore database operations
 
-import { db } from '../firebase-config.js';
+import { auth, db } from '../firebase-config.js';
 
 import {
   collection,
@@ -15,9 +15,14 @@ import {
   query,
   where,
   orderBy,
+  writeBatch,
   serverTimestamp,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
+import {
+  isInstructorAttendanceLocked,
+  buildInstructorAttendanceLockError
+} from './instructor-attendance-lock.js';
 
 /* ===========================
    CLASS OPERATIONS
@@ -314,6 +319,8 @@ export async function getSessionById(sessionId) {
 
 export async function deleteAttendanceSession(sessionId) {
 
+  await assertInstructorAttendanceWindowOpenForCurrentUser();
+
   const sessionRef = doc(db, "attendanceSessions", sessionId);
 
   await deleteDoc(sessionRef);
@@ -325,6 +332,8 @@ export async function deleteAttendanceSession(sessionId) {
 =========================== */
 
 export async function saveAttendanceRecord(sessionId, studentId, status) {
+
+  await assertInstructorAttendanceWindowOpenForCurrentUser();
 
   const recordsRef = collection(db, "attendanceRecords");
 
@@ -542,17 +551,48 @@ export async function createSession(payload) {
   // Support general summary payloads (admin marking general attendance)
   const generalSummary = payload.generalSummary || payload.summary || null;
 
-  const sessionId = await createAttendanceSession(classId, date, createdBy, generalSummary);
+  await assertInstructorAttendanceWindowOpenForCurrentUser(createdBy || auth.currentUser?.uid || null);
+
+  const sessionsRef = collection(db, "attendanceSessions");
+  const sessionRef = doc(sessionsRef);
+  const sessionId = sessionRef.id;
+
+  const sessionData = {
+    classId,
+    date: Timestamp.fromDate(new Date(date)),
+    createdBy,
+    createdAt: serverTimestamp()
+  };
+
+  if (generalSummary && typeof generalSummary === 'object') {
+    if (typeof generalSummary.present === 'number') sessionData.summaryPresent = Number(generalSummary.present);
+    if (typeof generalSummary.absent === 'number') sessionData.summaryAbsent = Number(generalSummary.absent);
+    if (typeof generalSummary.total === 'number') sessionData.summaryTotal = Number(generalSummary.total);
+    sessionData.isGeneral = true;
+  }
+
+  const batch = writeBatch(db);
+  batch.set(sessionRef, sessionData);
 
   if (Array.isArray(payload.records)) {
+    const recordsRef = collection(db, "attendanceRecords");
+
     for (const r of payload.records) {
       const studentId = r.studentId || r.id;
       const status = r.status || 'absent';
-      if (studentId) {
-        await saveAttendanceRecord(sessionId, studentId, status);
-      }
+      if (!studentId) continue;
+
+      const recordRef = doc(recordsRef);
+      batch.set(recordRef, {
+        sessionId,
+        studentId,
+        status,
+        createdAt: serverTimestamp()
+      });
     }
   }
+
+  await batch.commit();
 
   return sessionId;
 
@@ -566,6 +606,24 @@ export async function updateAttendance(sessionId, studentId, status) {
 // Delete session wrapper
 export async function deleteSession(sessionId) {
   return await deleteAttendanceSession(sessionId);
+}
+
+async function assertInstructorAttendanceWindowOpenForCurrentUser(explicitUserId = null) {
+  const userId = explicitUserId || auth.currentUser?.uid || null;
+  if (!userId) return;
+
+  let role = null;
+  try {
+    role = await getUserRole(userId);
+  } catch (error) {
+    console.warn('Attendance lock role lookup failed:', error);
+    return;
+  }
+
+  if (role !== 'instructor') return;
+  if (!isInstructorAttendanceLocked(new Date())) return;
+
+  throw buildInstructorAttendanceLockError(new Date());
 }
 
 // Calculate attendance statistics for a class

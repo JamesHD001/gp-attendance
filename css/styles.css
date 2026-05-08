@@ -615,6 +615,37 @@ textarea {
   color: var(--danger-red);
 }
 
+.attendance-lock-banner {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  background-color: #ffffff;
+}
+
+.attendance-lock-banner.is-open {
+  border-color: rgba(42, 157, 63, 0.25);
+  background-color: rgba(42, 157, 63, 0.06);
+}
+
+.attendance-lock-banner.is-locked {
+  border-color: rgba(204, 0, 0, 0.25);
+  background-color: rgba(204, 0, 0, 0.06);
+}
+
+.attendance-lock-banner__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-sm);
+}
+
+.attendance-lock-banner p:last-child {
+  margin-bottom: 0;
+}
+
 /* ===== LOGIN PAGE ===== */
 
 .login-container {

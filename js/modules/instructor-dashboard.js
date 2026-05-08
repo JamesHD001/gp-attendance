@@ -15,6 +15,11 @@ import { createStudentsSkeleton, createAttendanceSkeleton, createPerformanceSkel
 import { Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
 import { renderAnalyticsTab } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
+import {
+  getInstructorAttendanceLockState,
+  getMillisecondsUntilNextMinute,
+  getNigeriaDateKey
+} from './instructor-attendance-lock.js';
 
 export class InstructorDashboard {
   constructor() {
@@ -29,6 +34,10 @@ export class InstructorDashboard {
     this.isLoading = true;
     this.currentTab = 'students';
     this.eventListenersInitialized = false;
+    this.attendanceLockState = getInstructorAttendanceLockState();
+    this.attendanceLockTickTimeout = null;
+    this.attendanceLockTickInterval = null;
+    this.hasShownAttendanceLockNotice = false;
   }
 
   async init() {
@@ -41,6 +50,7 @@ export class InstructorDashboard {
       this.userData = { name: 'Local Instructor', assignedClassId: 'local-class' };
       this.assignedClass = 'local-class';
       this.assignedClassName = 'Demo Class';
+      this.startAttendanceLockMonitor();
       this.renderDashboard();
       this.attachFreshEventListeners();
       try {
@@ -57,6 +67,7 @@ export class InstructorDashboard {
       return;
     }
 
+    this.startAttendanceLockMonitor();
     AuthService.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = "../index.html"; return; }
       const allowed = await AuthService.requireRole("instructor");
@@ -81,6 +92,75 @@ export class InstructorDashboard {
   attachFreshEventListeners() {
     this.eventListenersInitialized = false;
     this.attachEventListeners();
+  }
+
+  startAttendanceLockMonitor() {
+    this.stopAttendanceLockMonitor();
+    this.refreshAttendanceLockState();
+
+    if (typeof window === 'undefined') return;
+
+    const tick = () => {
+      this.refreshAttendanceLockState({ notifyOnNewLock: true });
+    };
+
+    this.attendanceLockTickTimeout = window.setTimeout(() => {
+      tick();
+      this.attendanceLockTickInterval = window.setInterval(tick, 60 * 1000);
+    }, getMillisecondsUntilNextMinute(new Date()) + 250);
+  }
+
+  stopAttendanceLockMonitor() {
+    if (this.attendanceLockTickTimeout) {
+      clearTimeout(this.attendanceLockTickTimeout);
+      this.attendanceLockTickTimeout = null;
+    }
+
+    if (this.attendanceLockTickInterval) {
+      clearInterval(this.attendanceLockTickInterval);
+      this.attendanceLockTickInterval = null;
+    }
+  }
+
+  refreshAttendanceLockState(options = {}) {
+    const { notifyOnNewLock = false } = options;
+    const previousState = this.attendanceLockState;
+    this.attendanceLockState = getInstructorAttendanceLockState();
+
+    const justLocked = previousState && !previousState.isLocked && this.attendanceLockState.isLocked;
+    const dateChanged = previousState && previousState.currentDateKey !== this.attendanceLockState.currentDateKey;
+
+    if (notifyOnNewLock && justLocked && !this.hasShownAttendanceLockNotice) {
+      this.hasShownAttendanceLockNotice = true;
+      showNotification('Attendance is now locked for today. Instructors cannot mark attendance after 4:00 PM Nigerian time.', 'warning');
+    }
+
+    if (!this.attendanceLockState.isLocked) {
+      this.hasShownAttendanceLockNotice = false;
+    }
+
+    if ((justLocked || dateChanged) && this.currentTab === 'attendance' && !this.isLoading) {
+      this.renderAttendanceTab();
+    }
+
+    return this.attendanceLockState;
+  }
+
+  getAttendanceLockBannerMarkup() {
+    const state = this.attendanceLockState || this.refreshAttendanceLockState();
+    const toneClass = state.isLocked ? 'attendance-lock-banner is-locked' : 'attendance-lock-banner is-open';
+    const statusLabel = state.isLocked ? 'Locked' : 'Open';
+
+    return `
+      <div class="${toneClass}" data-attendance-lock-state="${state.isLocked ? 'locked' : 'open'}">
+        <div class="attendance-lock-banner__header">
+          <strong>Attendance Window: ${statusLabel}</strong>
+          <span class="badge ${state.isLocked ? 'badge-danger' : 'badge-success'}">${state.currentTimeLabel} Nigeria time</span>
+        </div>
+        <p>${state.statusMessage}</p>
+        <p class="text-muted">Cutoff time: ${state.cutoffLabel}</p>
+      </div>
+    `;
   }
 
   async loadInstructorData() {
@@ -257,8 +337,8 @@ export class InstructorDashboard {
     if (this.students.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'text-muted';
-            console.error('Add student error', err);
-            showNotification('Failed to add student: ' + (err.message || ''), 'error');
+      empty.textContent = 'No students have been added to this class yet.';
+      container.appendChild(empty);
       return;
     }
 
@@ -352,6 +432,7 @@ export class InstructorDashboard {
 
   /* ---- ATTENDANCE TAB ---- */
   renderAttendanceTab() {
+    this.refreshAttendanceLockState();
     const container = document.getElementById("attendanceTab");
     if (this.isLoading) {
       clearElement(container);
@@ -359,27 +440,34 @@ export class InstructorDashboard {
       container.appendChild(createTableSkeleton(5, 3));
       return;
     }
+    const isLocked = this.attendanceLockState?.isLocked;
     // FIX Bug 10: formatDate correctly handles Firestore Timestamps via its toDate() guard
     const sessionsHTML = this.sessions.map(session => `
       <tr>
         <td>${formatDate(session.date)}</td>
         <td>${session.records.filter(r => r.status === "present").length} / ${session.records.length}</td>
         <td>
-          <button class="btn btn-small btn-danger delete-session" data-id="${session.id}">Delete</button>
+          <button class="btn btn-small btn-danger delete-session" data-id="${session.id}" ${isLocked ? 'disabled' : ''}>Delete</button>
         </td>
       </tr>
     `).join("");
 
     container.innerHTML = `
       <h2>Attendance</h2>
-      <button id="newSessionBtn" class="btn btn-primary mb-lg">New Attendance Session</button>
+      ${this.getAttendanceLockBannerMarkup()}
+      <button id="newSessionBtn" class="btn ${isLocked ? 'btn-secondary' : 'btn-primary'} mb-lg" ${isLocked ? 'disabled' : ''}>${isLocked ? 'Attendance Locked' : 'New Attendance Session'}</button>
       <table class="data-table">
         <thead><tr><th>Date</th><th>Attendance</th><th>Actions</th></tr></thead>
         <tbody>${sessionsHTML}</tbody>
       </table>
     `;
 
-    document.getElementById("newSessionBtn")?.addEventListener("click", () => this.renderNewSessionForm());
+    if (!isLocked) {
+      document.getElementById("newSessionBtn")?.addEventListener("click", () => this.renderNewSessionForm());
+    }
+
+    if (isLocked) return;
+
     container.querySelectorAll(".delete-session").forEach(btn => {
       btn.addEventListener("click", (e) => {
         const sessionId = e.currentTarget.dataset.id;
@@ -403,6 +491,13 @@ export class InstructorDashboard {
 
   /* ---- NEW SESSION FORM ---- */
   renderNewSessionForm() {
+    this.refreshAttendanceLockState();
+    if (this.attendanceLockState?.isLocked) {
+      this.renderAttendanceTab();
+      showNotification('Attendance is locked for today. Instructors cannot mark attendance after 4:00 PM Nigerian time.', 'warning');
+      return;
+    }
+
     const container = document.getElementById("attendanceTab");
     const studentsHTML = this.students.map(s => `
       <tr>
@@ -413,6 +508,7 @@ export class InstructorDashboard {
 
     container.innerHTML = `
       <h2>New Attendance Session</h2>
+      ${this.getAttendanceLockBannerMarkup()}
       <table class="data-table">
         <thead><tr><th>Student</th><th>Status</th></tr></thead>
         <tbody>${studentsHTML}</tbody>
@@ -425,6 +521,13 @@ export class InstructorDashboard {
 
     document.getElementById("cancelSession")?.addEventListener("click", () => this.renderAttendanceTab());
     document.getElementById("saveAttendance")?.addEventListener("click", async () => {
+      this.refreshAttendanceLockState();
+      if (this.attendanceLockState?.isLocked) {
+        this.renderAttendanceTab();
+        showNotification('Attendance is locked for today. Instructors cannot mark attendance after 4:00 PM Nigerian time.', 'warning');
+        return;
+      }
+
       const btn = document.getElementById("saveAttendance");
       btn.disabled = true;
       try {
@@ -433,7 +536,12 @@ export class InstructorDashboard {
           const student = this.students.find(s => s.id === sel.dataset.id);
           records.push({ studentId: sel.dataset.id, name: student?.name || '', status: sel.value });
         });
-        await createSession({ class: this.assignedClass, date: new Date().toISOString().split("T")[0], records, createdBy: this.currentUser?.uid || 'local-instructor' });
+        await createSession({
+          class: this.assignedClass,
+          date: getNigeriaDateKey(new Date()),
+          records,
+          createdBy: this.currentUser?.uid || 'local-instructor'
+        });
         await this.loadSessions();
         this.renderAttendanceTab();
         showNotification('Attendance saved', 'success');

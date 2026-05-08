@@ -3,9 +3,33 @@ const path = require('path');
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');
 const { doc, setDoc, collection, addDoc, getDocs, Timestamp } = require('firebase/firestore');
 
+function getNigeriaNowParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(now).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+
+  return {
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+    hourNumber: Number(parts.hour || 0),
+    minuteNumber: Number(parts.minute || 0),
+    label: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+  };
+}
+
 async function run() {
   const projectId = 'gp-attendance-test';
   const rules = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
+  const nigeriaNow = getNigeriaNowParts();
+  const instructorAttendanceLocked = nigeriaNow.hourNumber >= 16;
 
   const testEnv = await initializeTestEnvironment({
     projectId,
@@ -13,6 +37,8 @@ async function run() {
   });
 
   try {
+    console.log(`Current Nigeria time: ${nigeriaNow.label}`);
+    console.log(`Instructor attendance window is ${instructorAttendanceLocked ? 'LOCKED' : 'OPEN'}.`);
     console.log('Seeding data (security rules disabled)...');
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const adminDb = context.firestore();
@@ -107,8 +133,13 @@ async function run() {
 
     console.log('Attempt: instructor create session for class1');
     try {
-      await assertSucceeds(addDoc(collection(instructorDb, 'attendanceSessions'), sessionData));
-      console.log('OK: instructor create session for class1');
+      if (instructorAttendanceLocked) {
+        await assertFails(addDoc(collection(instructorDb, 'attendanceSessions'), sessionData));
+        console.log('OK: instructor session creation blocked after 4:00 PM Nigeria time');
+      } else {
+        await assertSucceeds(addDoc(collection(instructorDb, 'attendanceSessions'), sessionData));
+        console.log('OK: instructor create session for class1');
+      }
     } catch (e) {
       console.error('ERROR: instructor create session failed', e);
       throw e;
@@ -163,8 +194,13 @@ async function run() {
 
     console.log('Attempt: instructor create attendance record');
     try {
-      await assertSucceeds(addDoc(collection(instructorDb, 'attendanceRecords'), { sessionId: sessionRef.id, studentId: 's1', status: 'present', createdAt: Timestamp.now() }));
-      console.log('OK: instructor create attendance record');
+      if (instructorAttendanceLocked) {
+        await assertFails(addDoc(collection(instructorDb, 'attendanceRecords'), { sessionId: sessionRef.id, studentId: 's1', status: 'present', createdAt: Timestamp.now() }));
+        console.log('OK: instructor attendance record creation blocked after 4:00 PM Nigeria time');
+      } else {
+        await assertSucceeds(addDoc(collection(instructorDb, 'attendanceRecords'), { sessionId: sessionRef.id, studentId: 's1', status: 'present', createdAt: Timestamp.now() }));
+        console.log('OK: instructor create attendance record');
+      }
     } catch (e) {
       console.error('ERROR: instructor create attendance record failed', e);
       throw e;
