@@ -126,6 +126,10 @@ export function createMotivationCard(title = 'Daily Inspiration') {
  * @param {object}      opts
  * @param {string|null} opts.assignedClassId - When set (instructor view), restrict
  *                                             the class selector to this single class.
+ * @param {boolean}     opts.showGatheringPlaceStats - Show GP-wide summary cards.
+ * @param {boolean}     opts.showUpcomingSchedule - Show the shared upcoming schedule.
+ * @param {boolean}     opts.showPrintButton - Show the print report button.
+ * @param {string}      opts.classSectionTitle - Heading for the class analytics block.
  * @param {object}      opts.quoteIntervalRef - Object with a `current` property used
  *                                              to store/clear the quote rotation interval.
  */
@@ -135,7 +139,11 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
     quoteIntervalRef = {},
     requireAuth = false,
     isDemoMode = false,
-    emptyStateMessage = 'Sign in to view analytics.'
+    emptyStateMessage = 'Sign in to view analytics.',
+    showGatheringPlaceStats = true,
+    showUpcomingSchedule = true,
+    showPrintButton = true,
+    classSectionTitle = 'Attendance Statistics by Class'
   } = opts;
 
   clearElement(tab);
@@ -162,52 +170,52 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
   // renders rotating inspirational quotes to avoid duplication.
 
   // ── 2. GP overall statistics ──────────────────────────────────────────────
-  const gpStatsSection = document.createElement('div');
-  gpStatsSection.className = 'analytics-section';
-  const gpStatsTitle = document.createElement('h2');
-  gpStatsTitle.textContent = 'Gathering Place Overall Statistics';
-  gpStatsSection.appendChild(gpStatsTitle);
+  if (showGatheringPlaceStats) {
+    const gpStatsSection = document.createElement('div');
+    gpStatsSection.className = 'analytics-section';
+    const gpStatsTitle = document.createElement('h2');
+    gpStatsTitle.textContent = 'Gathering Place Overall Statistics';
+    gpStatsSection.appendChild(gpStatsTitle);
 
-  try {
-    const gpStats = await getGatheringPlaceStats();
-    const grid = document.createElement('div');
-    grid.className = 'stats-grid';
-    [
-      { label: 'Total Classes',          value: gpStats.totalClasses },
-      { label: 'Total Students',         value: gpStats.totalStudents },
-      { label: 'Total Sessions',         value: gpStats.totalSessions },
-      { label: 'Present',                value: gpStats.totalPresent },
-      { label: 'Absent',                 value: gpStats.totalAbsent },
-      { label: 'Overall Attendance Rate', value: gpStats.overallRate + '%' }
-    ].forEach(({ label, value }) => {
-      const card = document.createElement('div');
-      card.className = 'stat-card';
-      card.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value">${value}</div>`;
-      grid.appendChild(card);
-    });
-    gpStatsSection.appendChild(grid);
-  } catch (err) {
-    console.error('Error loading GP stats:', err);
-    gpStatsSection.innerHTML += '<p class="text-muted">No attendance data available yet.</p>';
+    try {
+      const gpStats = await getGatheringPlaceStats();
+      const grid = document.createElement('div');
+      grid.className = 'stats-grid';
+      [
+        { label: 'Total Classes',          value: gpStats.totalClasses },
+        { label: 'Total Students',         value: gpStats.totalStudents },
+        { label: 'Total Sessions',         value: gpStats.totalSessions },
+        { label: 'Present',                value: gpStats.totalPresent },
+        { label: 'Absent',                 value: gpStats.totalAbsent },
+        { label: 'Overall Attendance Rate', value: gpStats.overallRate + '%' }
+      ].forEach(({ label, value }) => {
+        const card = document.createElement('div');
+        card.className = 'stat-card';
+        card.innerHTML = `<div class="stat-label">${label}</div><div class="stat-value">${value}</div>`;
+        grid.appendChild(card);
+      });
+      gpStatsSection.appendChild(grid);
+    } catch (err) {
+      console.error('Error loading GP stats:', err);
+      gpStatsSection.innerHTML += '<p class="text-muted">No attendance data available yet.</p>';
+    }
+    mainContainer.appendChild(gpStatsSection);
   }
-  mainContainer.appendChild(gpStatsSection);
 
   // ── 3. Class-specific attendance statistics ───────────────────────────────
   const classStatsSection = document.createElement('div');
   classStatsSection.className = 'analytics-section';
   const classStatsTitle = document.createElement('h2');
-  classStatsTitle.textContent = 'Attendance Statistics by Class';
+  classStatsTitle.textContent = classSectionTitle;
   classStatsSection.appendChild(classStatsTitle);
 
   const filterRow = document.createElement('div');
   filterRow.className = 'filter-row';
 
   // Instructors only see their own class; admins/leaders see all.
+  const assignedClassLabel = classes.find(classItem => classItem.id === assignedClassId)?.name || 'Your Class';
   const classOptions = assignedClassId
-    ? [
-        { label: 'Select Class...', value: '' },
-        { label: 'Your Class',      value: assignedClassId }
-      ]
+    ? [{ label: assignedClassLabel, value: assignedClassId }]
     : [
         { label: 'Select Class...', value: '' },
         ...classes.map(c => ({ label: c.name, value: c.id }))
@@ -292,45 +300,49 @@ export async function renderAnalyticsTab(tab, classes, opts = {}) {
   mainContainer.appendChild(classStatsSection);
 
   // ── 4. Upcoming schedule ──────────────────────────────────────────────────
-  const scheduleSection = document.createElement('div');
-  scheduleSection.className = 'analytics-section';
-  const scheduleTitle = document.createElement('h2');
-  scheduleTitle.textContent = 'Upcoming Gathering Place Schedule';
-  scheduleSection.appendChild(scheduleTitle);
+  if (showUpcomingSchedule) {
+    const scheduleSection = document.createElement('div');
+    scheduleSection.className = 'analytics-section';
+    const scheduleTitle = document.createElement('h2');
+    scheduleTitle.textContent = 'Upcoming Gathering Place Schedule';
+    scheduleSection.appendChild(scheduleTitle);
 
-  try {
-    const nextDates = getNextClassDates(30);
-    const scheduleContainer = document.createElement('div');
-    scheduleContainer.className = 'schedule-list';
+    try {
+      const nextDates = getNextClassDates(30);
+      const scheduleContainer = document.createElement('div');
+      scheduleContainer.className = 'schedule-list';
 
-    nextDates.forEach(entry => {
-      const item = document.createElement('div');
-      item.className = 'schedule-item';
-      const formattedDate = new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric'
+      nextDates.forEach(entry => {
+        const item = document.createElement('div');
+        item.className = 'schedule-item';
+        const formattedDate = new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric'
+        });
+        item.innerHTML = `
+          <div class="schedule-date">${formattedDate}</div>
+          <div class="schedule-info">
+            <div class="schedule-type">${entry.type}</div>
+            ${entry.classes.length
+              ? `<div class="schedule-classes">${entry.classes.join(', ')}</div>`
+              : ''}
+          </div>
+        `;
+        scheduleContainer.appendChild(item);
       });
-      item.innerHTML = `
-        <div class="schedule-date">${formattedDate}</div>
-        <div class="schedule-info">
-          <div class="schedule-type">${entry.type}</div>
-          ${entry.classes.length
-            ? `<div class="schedule-classes">${entry.classes.join(', ')}</div>`
-            : ''}
-        </div>
-      `;
-      scheduleContainer.appendChild(item);
-    });
-    scheduleSection.appendChild(scheduleContainer);
-  } catch (err) {
-    console.error('Error loading schedule:', err);
-    scheduleSection.innerHTML += '<p class="text-danger">Error loading schedule.</p>';
+      scheduleSection.appendChild(scheduleContainer);
+    } catch (err) {
+      console.error('Error loading schedule:', err);
+      scheduleSection.innerHTML += '<p class="text-danger">Error loading schedule.</p>';
+    }
+    mainContainer.appendChild(scheduleSection);
   }
-  mainContainer.appendChild(scheduleSection);
 
   // ── Print button (prepended so it sits above all sections) ────────────────
-  const printBtn = createButton('Print Report', () => triggerPrint());
-  printBtn.className = 'btn btn-secondary mt-lg mb-lg';
-  mainContainer.insertBefore(printBtn, mainContainer.firstChild);
+  if (showPrintButton) {
+    const printBtn = createButton('Print Report', () => triggerPrint());
+    printBtn.className = 'btn btn-secondary mt-lg mb-lg';
+    mainContainer.insertBefore(printBtn, mainContainer.firstChild);
+  }
 
   clearElement(tab);
   tab.appendChild(mainContainer);

@@ -673,7 +673,10 @@ export class InstructorDashboard {
       assignedClassId: this.assignedClass,
       requireAuth: true,
       isDemoMode: this.isDemoMode,
-      emptyStateMessage: 'Attendance analytics loads only for authenticated instructors assigned to a real class.'
+      emptyStateMessage: 'Attendance analytics loads only for authenticated instructors assigned to a real class.',
+      showGatheringPlaceStats: false,
+      showUpcomingSchedule: false,
+      classSectionTitle: 'Your Class Attendance Statistics'
     });
   }
 
