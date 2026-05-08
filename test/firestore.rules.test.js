@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');
-const { doc, setDoc, collection, addDoc, Timestamp } = require('firebase/firestore');
+const { doc, setDoc, collection, addDoc, getDocs, Timestamp } = require('firebase/firestore');
 
 async function run() {
   const projectId = 'gp-attendance-test';
@@ -52,8 +52,56 @@ async function run() {
       throw e;
     }
 
+    console.log('Attempt: admin read all users');
+    try {
+      await assertSucceeds(getDocs(collection(adminDb, 'users')));
+      console.log('OK: admin read all users');
+    } catch (e) {
+      console.error('ERROR: admin read all users failed', e);
+      throw e;
+    }
+
+    console.log('Attempt: admin add student');
+    try {
+      await assertSucceeds(addDoc(collection(adminDb, 'students'), {
+        name: 'Student Admin Added',
+        classId: 'class1',
+        createdAt: Timestamp.now()
+      }));
+      console.log('OK: admin add student');
+    } catch (e) {
+      console.error('ERROR: admin add student failed', e);
+      throw e;
+    }
+
     const instructorContext = testEnv.authenticatedContext('instructor1');
     const instructorDb = instructorContext.firestore();
+
+    console.log('Attempt: instructor add student to own class');
+    try {
+      await assertSucceeds(addDoc(collection(instructorDb, 'students'), {
+        name: 'Student Instructor Added',
+        classId: 'class1',
+        createdAt: Timestamp.now()
+      }));
+      console.log('OK: instructor add student to own class');
+    } catch (e) {
+      console.error('ERROR: instructor add own class student failed', e);
+      throw e;
+    }
+
+    console.log('Attempt: instructor add student to another class (should fail)');
+    try {
+      await assertFails(addDoc(collection(instructorDb, 'students'), {
+        name: 'Student Wrong Class',
+        classId: 'other-class',
+        createdAt: Timestamp.now()
+      }));
+      console.log('OK: prevented instructor from adding student to another class');
+    } catch (e) {
+      console.error('ERROR: instructor other class student protection failed', e);
+      throw e;
+    }
 
     const sessionData = { classId: 'class1', date: Timestamp.now(), createdBy: 'instructor1', createdAt: Timestamp.now() };
 

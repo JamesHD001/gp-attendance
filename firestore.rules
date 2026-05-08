@@ -13,14 +13,16 @@ service cloud.firestore {
 
     // Helper function to get user's role (safe when user doc missing)
     function getUserRole(userId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(userId));
-      return userDoc.exists() ? userDoc.data.role : null;
+      return exists(/databases/$(database)/documents/users/$(userId))
+        ? get(/databases/$(database)/documents/users/$(userId)).data.role
+        : null;
     }
 
     // BUG FIX: was `assignedClass` — now `assignedClassId` to match schema
     function getUserAssignedClass(userId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(userId));
-      return userDoc.exists() ? userDoc.data.assignedClassId : null;
+      return exists(/databases/$(database)/documents/users/$(userId))
+        ? get(/databases/$(database)/documents/users/$(userId)).data.assignedClassId
+        : null;
     }
 
     // Helper function to check if user is admin
@@ -43,8 +45,16 @@ service cloud.firestore {
     }
 
     function sessionDoc(sessionId) {
-      let s = get(/databases/$(database)/documents/attendanceSessions/$(sessionId));
-      return s.exists() ? s.data : null;
+      return exists(/databases/$(database)/documents/attendanceSessions/$(sessionId))
+        ? get(/databases/$(database)/documents/attendanceSessions/$(sessionId)).data
+        : null;
+    }
+
+    function instructorOwnsSession(sessionId) {
+      let session = sessionDoc(sessionId);
+      return isInstructor() &&
+        session != null &&
+        session.createdBy == request.auth.uid;
     }
 
     function instructorOwnsSessionByData(sessionData) {
@@ -152,21 +162,17 @@ service cloud.firestore {
       // Instructors may create attendance records for sessions they own
       allow create: if isInstructor() &&
         isValidAttendanceStatus(request.resource.data.status) &&
-        (get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).exists()) &&
-        get(/databases/$(database)/documents/attendanceSessions/$(request.resource.data.sessionId)).data.createdBy == request.auth.uid;
+        instructorOwnsSession(request.resource.data.sessionId);
 
       // Instructors may update records only if the session belongs to them
       allow update: if isInstructor() &&
         isValidAttendanceStatus(request.resource.data.status) &&
-        (get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).exists()) &&
-        get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).data.createdBy == request.auth.uid &&
+        instructorOwnsSession(resource.data.sessionId) &&
         request.resource.data.sessionId == resource.data.sessionId &&
         request.resource.data.studentId == resource.data.studentId;
 
       // Instructors may delete records only if the session belongs to them
-      allow delete: if isInstructor() &&
-        (get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).exists()) &&
-        get(/databases/$(database)/documents/attendanceSessions/$(resource.data.sessionId)).data.createdBy == request.auth.uid;
+      allow delete: if instructorOwnsSession(resource.data.sessionId);
     }
 
     // ====================
