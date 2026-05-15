@@ -320,33 +320,127 @@ export class AdminDashboard {
         container.appendChild(list);
       }
 
-        const nextBtn = createButton(currentIndex < classes.length - 1 ? 'Save and Next' : 'Save', async () => {
-        // collect records
-        if (students.length) {
-          const records = students.map(st => ({ studentId: st.id, status: document.getElementById(`att_${cls.id}_${st.id}`).checked ? 'present' : 'absent' }));
-          try {
-            await createSession({ classId: cls.id, date: sessionDate, records, createdBy: this.currentUser?.uid });
-            showNotification(`Saved attendance for ${cls.name}`, 'success');
-          } catch (err) {
-            console.error('Failed to save attendance for class', cls.id, err);
-            showNotification(`Failed to save attendance for ${cls.name}`, 'error');
+      const nextBtn = createButton(
+        currentIndex < classes.length - 1 ? 'Save and Next' : 'Save',
+        async () => {
+      
+          // Collect attendance records
+          if (students.length) {
+      
+            const records = students.map(st => ({
+              studentId: st.id,
+              status: document.getElementById(`att_${cls.id}_${st.id}`).checked
+                ? 'present'
+                : 'absent'
+            }));
+      
+            try {
+      
+              await createSession({
+                classId: cls.id,
+                date: sessionDate,
+                records,
+                createdBy: this.currentUser?.uid
+              });
+      
+              showNotification(
+                `Saved attendance for ${cls.name}`,
+                'success'
+              );
+      
+            } catch (err) {
+      
+              console.error(
+                'Failed to save attendance for class',
+                cls.id,
+                err
+              );
+      
+              showNotification(
+                `Failed to save attendance for ${cls.name}`,
+                'error'
+              );
+      
+              return;
+            }
+          }
+      
+          modal.remove();
+      
+          currentIndex += 1;
+      
+          if (currentIndex < classes.length) {
+      
+            await showForClass(classes[currentIndex]);
+      
+          } else {
+      
+            showNotification(
+              'Attendance marking completed',
+              'success'
+            );
           }
         }
-        modal.remove();
-        currentIndex += 1;
-        if (currentIndex < classes.length) {
-          await showForClass(classes[currentIndex]);
+      );
+      
+      const skipBtn = createButton(
+        'Skip this class',
+      
+        async () => {
+      
+          modal.remove();
+      
+          showNotification(
+            `Skipped ${cls.name}`,
+            'warning'
+          );
+      
+          currentIndex += 1;
+      
+          if (currentIndex < classes.length) {
+      
+            await showForClass(classes[currentIndex]);
+      
+          } else {
+      
+            showNotification(
+              'All classes completed',
+              'success'
+            );
+          }
+        },
+      
+        {
+          className: 'btn-secondary'
         }
-      });
-
-      const cancelBtn = createButton('Cancel', () => { modal.remove(); });
-      const modal = createModal(`Mark Attendance — ${cls.name}`, container, [nextBtn, cancelBtn]);
+      );
+      
+      const cancelBtn = createButton(
+        'Cancel',
+        () => {
+          modal.remove();
+        },
+        {
+          className: 'btn-danger'
+        }
+      );
+      
+      const modal = createModal(
+        `Mark Attendance — ${cls.name}`,
+        container,
+        [
+          nextBtn,
+          skipBtn,
+          cancelBtn
+        ]
+      );
+      
       document.body.appendChild(modal);
     };
-
-    // Start with first class
+    
+     // Start with first class
     await showForClass(classes[currentIndex]);
-  }
+    }
 
   async showMarkGeneralAttendanceModal() {
     // Admin can record a general (gathering place) attendance summary: present & absent counts
