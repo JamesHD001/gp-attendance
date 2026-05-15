@@ -571,19 +571,26 @@ export async function createSession(payload) {
     sessionData.isGeneral = true;
   }
 
-  const batch = writeBatch(db);
-  batch.set(sessionRef, sessionData);
+  // IMPORTANT:
+  // Attendance session must be created BEFORE attendance records.
+  // Firestore security rules validate attendance records against an
+  // existing session document. Batched writes caused permission errors
+  // because the session document was not yet available during validation.
 
-  if (Array.isArray(payload.records)) {
+  await setDoc(sessionRef, sessionData);
+
+  if (Array.isArray(payload.records) && payload.records.length) {
     const recordsRef = collection(db, "attendanceRecords");
 
     for (const r of payload.records) {
       const studentId = r.studentId || r.id;
       const status = r.status || 'absent';
+
       if (!studentId) continue;
 
       const recordRef = doc(recordsRef);
-      batch.set(recordRef, {
+
+      await setDoc(recordRef, {
         sessionId,
         studentId,
         status,
@@ -591,8 +598,6 @@ export async function createSession(payload) {
       });
     }
   }
-
-  await batch.commit();
 
   return sessionId;
 
