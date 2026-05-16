@@ -17,6 +17,7 @@ This document describes the recommended Firestore collections, documents, and fi
     - `name`: string
     - `instructorId`: string (UID or empty string)
     - `isLocked`: boolean
+    - `isGeneralClass`: boolean (optional; marks shared/general classes such as Institute or Self-Reliance)
     - `createdAt`: timestamp
 
 - `userSessions` (document id = Firebase Auth UID)
@@ -32,6 +33,7 @@ This document describes the recommended Firestore collections, documents, and fi
     - `name`: string
     - `email`: string (optional)
     - `classId`: string (reference to `classes` doc id)
+    - `sharedClassIds`: string[] (optional secondary/shared class memberships)
     - `createdAt`: timestamp
 
 - `attendanceSessions` (document id = auto-generated)
@@ -61,6 +63,7 @@ This document describes the recommended Firestore collections, documents, and fi
 ## Index Recommendations
 
 - Index `students` by `classId` for efficient class lookups.
+- Optional: if shared class participation becomes large, index `students.sharedClassIds` for `array-contains` queries.
 - Index `attendanceRecords` by `sessionId` for session lookups.
 - Optional: composite index for `attendanceSessions` on (`classId`, `date`) to query sessions in date order.
 - Index `performanceRatings` by `classId` for class graduation/performance views.

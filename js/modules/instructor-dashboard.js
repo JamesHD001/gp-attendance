@@ -5,7 +5,7 @@ import {
   getStudentsByClass, addStudent, deleteStudent, updateStudent,
   getSessionsByClass, createSession, deleteSession,
   getAttendanceBySession, getClassById,
-  getPerformanceRatingsByClass, savePerformanceRating
+  getPerformanceRatingsByClass, savePerformanceRating, getStudentMembershipType
 } from './firestore.js';
 import {
   formatDate, createTable, createTableSkeleton,
@@ -346,13 +346,30 @@ export class InstructorDashboard {
       return;
     }
 
+    const hasSharedMembers = this.students.some(student => getStudentMembershipType(student, this.assignedClass) === 'shared');
+    if (hasSharedMembers) {
+      const note = document.createElement('p');
+      note.className = 'text-muted';
+      note.textContent = 'Shared-class members are visible here for attendance, but only students whose primary class is assigned to you can be edited or deleted from this screen.';
+      container.appendChild(note);
+    }
+
     const rows = this.students.map(s => ({
       'Name': s.name || '—',
+      'Membership': getStudentMembershipType(s, this.assignedClass) === 'shared' ? 'Shared' : 'Primary',
       'Class': this.assignedClassName || '—',
       'Email': s.email || '—',
       'Phone': s.phoneNumber || '—',
       'Location': s.location || '—',
       'Actions': () => {
+        const canManageRecord = s.classId === this.assignedClass;
+        if (!canManageRecord) {
+          const note = document.createElement('span');
+          note.className = 'text-muted';
+          note.textContent = 'Shared membership';
+          return note;
+        }
+
         const wrap = document.createElement('div');
         wrap.style.display = 'flex'; wrap.style.gap = '0.5rem';
 
@@ -378,7 +395,7 @@ export class InstructorDashboard {
         return wrap;
       }
     }));
-    container.appendChild(createTable(['Name','Class','Email','Phone','Location','Actions'], rows));
+    container.appendChild(createTable(['Name','Membership','Class','Email','Phone','Location','Actions'], rows));
   }
 
   showEditStudentModal(student) {

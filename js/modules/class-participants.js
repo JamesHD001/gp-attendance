@@ -51,6 +51,8 @@ export function showClassParticipantsModal(classRecord, students = [], options =
   let modal;
   const closeBtn = createButton('Close', () => modal.remove(), { className: 'btn-secondary' });
   modal = createModal(`Participants — ${className}`, content, [closeBtn]);
+  modal.classList.add('participants-modal');
+  modal.querySelector('.modal-content')?.classList.add('modal-content-wide');
   document.body.appendChild(modal);
   return modal;
 }

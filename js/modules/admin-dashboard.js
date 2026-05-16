@@ -5,7 +5,9 @@ import {
   initializeClasses, getClasses, getAllUsers, createClass,
   updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents, getStudentsByClass,
   deleteStudent, getUserData, createSession, getGatheringPlaceStats,
-  getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions, updateStudent
+  getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions, updateStudent,
+  ensureGeneralClasses, bulkAssignStudentsToClass, bulkRemoveStudentsFromClass,
+  studentHasClass, getStudentMembershipType
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
@@ -34,6 +36,12 @@ export class AdminDashboard {
     this.currentTab = 'overview';
     this.eventListenersInitialized = false;
     this._fetchingUserIds = new Set();
+    this.manageSelectedClassId = '';
+    this.manageTargetClassId = '';
+    this.manageGeneralTargetClassId = '';
+    this.manageSelectedStudentIds = new Set();
+    this.studentsFilterClassId = '';
+    this.studentsSearchTerm = '';
   }
 
   async init() {
@@ -108,6 +116,127 @@ export class AdminDashboard {
     catch (e) { console.error(e); }
   }
 
+  getClassRecordById(classId) {
+    return this.classes.find(cls => cls.id === classId) || null;
+  }
+
+  getClassName(classId, fallback = 'Unassigned') {
+    return this.getClassRecordById(classId)?.name || fallback;
+  }
+
+  getGeneralClasses() {
+    return this.classes.filter(classRecord => classRecord?.isGeneralClass);
+  }
+
+  getStudentsForClass(classId) {
+    return this.students.filter(student => studentHasClass(student, classId));
+  }
+
+  getSharedClassNames(student) {
+    const sharedClassIds = Array.isArray(student?.sharedClassIds) ? student.sharedClassIds : [];
+    if (!sharedClassIds.length) return '—';
+
+    return sharedClassIds
+      .map(classId => this.getClassName(classId, 'Unknown class'))
+      .join(', ');
+  }
+
+  ensureStudentsFilterState() {
+    const availableClassIds = new Set(this.classes.map(classRecord => classRecord.id));
+    if (this.studentsFilterClassId === '__unassigned__') return;
+
+    if (this.studentsFilterClassId && !availableClassIds.has(this.studentsFilterClassId)) {
+      this.studentsFilterClassId = '';
+    }
+  }
+
+  getFilteredStudents() {
+    this.ensureStudentsFilterState();
+
+    let filteredStudents = [...this.students];
+
+    if (this.studentsFilterClassId === '__unassigned__') {
+      filteredStudents = filteredStudents.filter(student => !student.classId);
+    } else if (this.studentsFilterClassId) {
+      filteredStudents = filteredStudents.filter(student => studentHasClass(student, this.studentsFilterClassId));
+    }
+
+    const searchTerm = String(this.studentsSearchTerm || '').trim().toLowerCase();
+    if (searchTerm) {
+      filteredStudents = filteredStudents.filter(student =>
+        String(student?.name || '').toLowerCase().includes(searchTerm)
+      );
+    }
+
+    return filteredStudents.sort((left, right) =>
+      String(left?.name || '').localeCompare(String(right?.name || ''), undefined, { sensitivity: 'base' })
+    );
+  }
+
+  ensureManageSelectionState() {
+    const availableClassIds = new Set(this.classes.map(classRecord => classRecord.id));
+
+    if (!this.manageSelectedClassId || !availableClassIds.has(this.manageSelectedClassId)) {
+      this.manageSelectedClassId = this.classes[0]?.id || '';
+    }
+
+    const selectableTargetClasses = this.classes.filter(classRecord => classRecord.id !== this.manageSelectedClassId);
+    if (!this.manageTargetClassId || !availableClassIds.has(this.manageTargetClassId) || this.manageTargetClassId === this.manageSelectedClassId) {
+      this.manageTargetClassId = selectableTargetClasses[0]?.id || '';
+    }
+
+    const generalClasses = this.getGeneralClasses();
+    const generalClassIds = new Set(generalClasses.map(classRecord => classRecord.id));
+    if (!this.manageGeneralTargetClassId || !generalClassIds.has(this.manageGeneralTargetClassId)) {
+      this.manageGeneralTargetClassId = generalClasses[0]?.id || '';
+    }
+
+    const visibleStudentIds = new Set(this.getStudentsForClass(this.manageSelectedClassId).map(student => student.id));
+    this.manageSelectedStudentIds = new Set(
+      [...this.manageSelectedStudentIds].filter(studentId => visibleStudentIds.has(studentId))
+    );
+  }
+
+  async reloadCoreData() {
+    await Promise.all([this.loadClasses(), this.loadStudents()]);
+    this.ensureManageSelectionState();
+  }
+
+  renderActiveTab() {
+    if (this.currentTab === 'classes') { this.renderClassesTab(); return; }
+    if (this.currentTab === 'users') { this.renderUsersTab(); return; }
+    if (this.currentTab === 'students') { this.renderStudentsTab(); return; }
+    if (this.currentTab === 'manage') { this.renderManageClassesStudentsTab(); return; }
+    if (this.currentTab === 'analytics') { this.renderAnalyticsTab(); return; }
+    if (this.currentTab === 'graduation') { this.renderGraduationTab(); return; }
+    this.renderOverviewTab();
+  }
+
+  confirmAction(title, message, options = {}) {
+    const {
+      confirmText = 'Confirm',
+      confirmClassName = 'btn-primary'
+    } = options;
+
+    return new Promise(resolve => {
+      const content = document.createElement('div');
+      content.innerHTML = `<p>${message}</p>`;
+
+      let modal;
+      const confirmBtn = createButton(confirmText, () => {
+        modal.remove();
+        resolve(true);
+      }, { className: confirmClassName });
+      const cancelBtn = createButton('Cancel', () => {
+        modal.remove();
+        resolve(false);
+      }, { className: 'btn-secondary' });
+
+      modal = createModal(title, content, [confirmBtn, cancelBtn]);
+      document.body.appendChild(modal);
+    });
+  }
+
   setupEventListeners() {
     if (this.eventListenersInitialized) return;
     this.eventListenersInitialized = true;
@@ -120,7 +249,7 @@ export class AdminDashboard {
       btn.addEventListener('click', (e) => this.switchTab(e.currentTarget.dataset.tab, e)));
 
     const navLinks = document.querySelectorAll('.nav-link');
-    const mapHash = h => ({ overview:'overview', classes:'classes', users:'users', attendance:'students', analytics:'analytics', graduation:'graduation' })[(h||'').replace('#','')] || (h||'').replace('#','');
+    const mapHash = h => ({ overview:'overview', classes:'classes', manage:'manage', users:'users', attendance:'students', analytics:'analytics', graduation:'graduation' })[(h||'').replace('#','')] || (h||'').replace('#','');
 
     navLinks.forEach(link => {
       link.addEventListener('click', (e) => {
@@ -155,6 +284,7 @@ export class AdminDashboard {
       clearElement(targetTabEl);
       let skeletonEl = createTabSkeleton();
       if (tabName === 'classes') skeletonEl = createClassesSkeleton();
+      if (tabName === 'manage') skeletonEl = createStudentsSkeleton();
       if (tabName === 'users') skeletonEl = createUsersSkeleton();
       if (tabName === 'students') skeletonEl = createStudentsSkeleton();
       if (tabName === 'attendance') skeletonEl = createAttendanceSkeleton();
@@ -166,6 +296,7 @@ export class AdminDashboard {
     // FIX: null guard for hash/sidebar navigation
     if (event?.target) event.target.classList.add('active');
     if (tabName === 'classes') this.renderClassesTab();
+    if (tabName === 'manage') this.renderManageClassesStudentsTab();
     if (tabName === 'users') this.renderUsersTab();
     if (tabName === 'students') this.renderStudentsTab();
     if (tabName === 'analytics') this.renderAnalyticsTab();
@@ -184,6 +315,7 @@ export class AdminDashboard {
     tabNav.innerHTML = `
       <button class="tab-btn active" data-tab="overview">Overview</button>
       <button class="tab-btn" data-tab="classes">Classes</button>
+      <button class="tab-btn" data-tab="manage">Class Management</button>
       <button class="tab-btn" data-tab="users">Leaders / Instructors</button>
       <button class="tab-btn" data-tab="students">Students</button>
       <button class="tab-btn" data-tab="analytics">Attendance Reports</button>
@@ -193,6 +325,7 @@ export class AdminDashboard {
     tabs.innerHTML = `
       <div id="overviewTab" class="tab-content"></div>
       <div id="classesTab" class="tab-content hidden"></div>
+      <div id="manageTab" class="tab-content hidden"></div>
       <div id="usersTab" class="tab-content hidden"></div>
       <div id="studentsTab" class="tab-content hidden"></div>
       <div id="analyticsTab" class="tab-content hidden"></div>
@@ -303,7 +436,7 @@ export class AdminDashboard {
     if (!sessionDate) return; // user cancelled
 
     const showForClass = async (cls) => {
-      const students = allStudents.filter(s => s.classId === cls.id);
+      const students = allStudents.filter(student => studentHasClass(student, cls.id));
       const container = document.createElement('div');
       container.innerHTML = `<h3>Mark Attendance — ${cls.name}</h3>`;
 
@@ -533,12 +666,13 @@ export class AdminDashboard {
         });
       }
       const instructorDisplay = instructor ? (instructor.name || instructor.email || instructor.id || 'Unknown') : (cls.instructorId ? 'Loading...' : 'Unassigned');
-      const participantsCount = this.students.filter(student => student.classId === cls.id).length;
+      const participantsCount = this.getStudentsForClass(cls.id).length;
 
       return {
         'Class Name': cls.name,
+        'Type': cls.isGeneralClass ? 'General / Shared' : 'Primary',
         'Instructor': instructorDisplay,
-        'Participants': participantsCount,
+        'Participants': String(participantsCount),
         'Status': cls.isLocked ? '🔒 Locked' : '🔓 Unlocked',
         'Actions': () => {
           const wrap = document.createElement('div');
@@ -568,18 +702,49 @@ export class AdminDashboard {
         }
       };
     });
-    tab.appendChild(createTable(['Class Name', 'Instructor', 'Participants', 'Status', 'Actions'], rows));
+    tab.appendChild(createTable(['Class Name', 'Type', 'Instructor', 'Participants', 'Status', 'Actions'], rows));
     document.getElementById('addClassBtn')?.addEventListener('click', () => this.showAddClassModal());
   }
 
-  showAddClassModal() {
+  showAddClassModal(options = {}) {
     const nameInput = createInput('text', 'Class Name', 'className');
-    const form = document.createElement('div'); form.append(nameInput);
+    const generalToggleWrap = document.createElement('label');
+    generalToggleWrap.style.display = 'flex';
+    generalToggleWrap.style.alignItems = 'center';
+    generalToggleWrap.style.gap = '0.5rem';
+
+    const generalCheckbox = document.createElement('input');
+    generalCheckbox.type = 'checkbox';
+
+    const generalText = document.createElement('span');
+    generalText.textContent = 'General class (shared)';
+
+    const helperText = document.createElement('p');
+    helperText.className = 'text-muted';
+    helperText.textContent = 'Use this when students can join the class in addition to their main class, like Institute or Self-Reliance.';
+
+    generalToggleWrap.append(generalCheckbox, generalText);
+
+    const form = document.createElement('div');
+    form.style.display = 'flex';
+    form.style.flexDirection = 'column';
+    form.style.gap = '0.75rem';
+    form.append(nameInput, generalToggleWrap, helperText);
     let modal;
     const createBtn = createButton('Create Class', async () => {
       const name = (nameInput.value || '').trim();
       if (!name) { showNotification('Please provide a class name', 'warning'); return; }
-      try { await createClass(name); modal.remove(); await this.loadClasses(); this.renderClassesTab(); showNotification('Class created successfully', 'success'); }
+      try {
+        const classId = await createClass(name, { isGeneralClass: generalCheckbox.checked });
+        modal.remove();
+        await this.loadClasses();
+        this.ensureManageSelectionState();
+        if (typeof options.onCreated === 'function') {
+          await options.onCreated(classId);
+        }
+        this.renderActiveTab();
+        showNotification('Class created successfully', 'success');
+      }
       catch (err) { console.error(err); showNotification('Failed to create class', 'error'); }
     });
     const cancelBtn = createButton('Cancel', () => modal.remove());
@@ -620,7 +785,8 @@ export class AdminDashboard {
     document.getElementById('addUserBtn')?.addEventListener('click', () => this.showAddUserModal());
   }
 
-  async renderStudentsTab() {
+  async renderStudentsTab(options = {}) {
+    const { focusSearch = false } = options;
     const tab = document.getElementById('studentsTab'); clearElement(tab);
     const h = document.createElement('div'); h.className = 'flex-between mb-lg';
     h.innerHTML = `<h2>Students</h2><button class="btn btn-primary" id="addStudentBtn">Add Student</button>`;
@@ -629,11 +795,61 @@ export class AdminDashboard {
       tab.appendChild(createTableSkeleton(6, 3));
       return;
     }
-    const rows = this.students.map(student => {
+    const filterWrap = document.createElement('div');
+    filterWrap.className = 'flex gap-md mb-lg';
+    filterWrap.style.flexWrap = 'wrap';
+
+    const classFilterSelect = createSelect([
+      { label: 'All classes', value: '' },
+      { label: 'Unassigned students', value: '__unassigned__' },
+      ...this.classes.map(classRecord => ({ label: classRecord.name, value: classRecord.id }))
+    ], 'studentsClassFilter', this.studentsFilterClassId || '');
+    classFilterSelect.value = this.studentsFilterClassId || '';
+    classFilterSelect.addEventListener('change', () => {
+      this.studentsFilterClassId = classFilterSelect.value;
+      this.renderStudentsTab();
+    });
+
+    const searchInput = createInput('search', 'Search by student name', 'studentsNameFilter');
+    searchInput.value = this.studentsSearchTerm || '';
+    searchInput.addEventListener('input', () => {
+      this.studentsSearchTerm = searchInput.value || '';
+      this.renderStudentsTab({ focusSearch: true });
+    });
+
+    const filterSummary = document.createElement('p');
+    filterSummary.className = 'text-muted';
+
+    const filteredStudents = this.getFilteredStudents();
+    const filterLabel = this.studentsFilterClassId === '__unassigned__'
+      ? 'unassigned students'
+      : (this.studentsFilterClassId ? this.getClassName(this.studentsFilterClassId, 'selected class') : 'all students');
+    const searchLabel = this.studentsSearchTerm.trim()
+      ? ` matching "${this.studentsSearchTerm.trim()}"`
+      : '';
+    filterSummary.textContent = `${filteredStudents.length} of ${this.students.length} students shown for ${filterLabel}${searchLabel}.`;
+
+    filterWrap.append(classFilterSelect, searchInput, filterSummary);
+    tab.appendChild(filterWrap);
+
+    if (focusSearch) {
+      requestAnimationFrame(() => {
+        const nextSearchInput = document.getElementById('studentsNameFilter');
+        if (!nextSearchInput) return;
+        nextSearchInput.focus();
+        const valueLength = nextSearchInput.value.length;
+        if (typeof nextSearchInput.setSelectionRange === 'function') {
+          nextSearchInput.setSelectionRange(valueLength, valueLength);
+        }
+      });
+    }
+
+    const rows = filteredStudents.map(student => {
       const cls = this.classes.find(c => c.id === student.classId);
       return {
         'Name': student.name || '—',
         'Class': cls ? cls.name : 'Unassigned',
+        'Shared Classes': this.getSharedClassNames(student),
         'Email': student.email || '—',
         'Phone': student.phoneNumber || '—',
         'Location': student.location || '—',
@@ -680,7 +896,18 @@ export class AdminDashboard {
         }
       };
     });
-    tab.appendChild(createTable(['Name', 'Class', 'Email', 'Phone', 'Location', 'Actions'], rows));
+
+    if (!rows.length) {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted';
+      empty.textContent = this.studentsFilterClassId
+        ? 'No students match the selected filter.'
+        : 'No students have been added yet.';
+      tab.appendChild(empty);
+    } else {
+      tab.appendChild(createTable(['Name', 'Class', 'Shared Classes', 'Email', 'Phone', 'Location', 'Actions'], rows));
+    }
+
     document.getElementById('addStudentBtn')?.addEventListener('click', () => this.showAddStudentModal());
   }
 
@@ -710,7 +937,8 @@ export class AdminDashboard {
         await addStudent(name, classId, email, phone, location);
         modal.remove();
         await this.loadStudents();
-        this.renderStudentsTab();
+        this.ensureManageSelectionState();
+        this.renderActiveTab();
         showNotification('Student added', 'success');
       }
       catch (err) { console.error('Add student error', err); showNotification('Failed to add student: ' + (err.message || ''), 'error'); }
@@ -758,14 +986,21 @@ export class AdminDashboard {
       const email = (emailInput.value||'').trim(); if (email) updates.email = email;
       const phone = (phoneInput.value||'').trim(); if (phone) updates.phoneNumber = phone;
       const location = (locationInput.value||'').trim(); if (location) updates.location = location;
-      const classId = classSelect.value; if (classId) updates.classId = classId;
+      const classId = classSelect.value;
+      if (classId) {
+        updates.classId = classId;
+        const nextSharedClassIds = (student.sharedClassIds || []).filter(sharedClassId => sharedClassId !== classId);
+        if (nextSharedClassIds.length !== (student.sharedClassIds || []).length) {
+          updates.sharedClassIds = nextSharedClassIds;
+        }
+      }
       const joined = joinedInput.value; if (joined) updates.createdAt = Timestamp.fromDate(new Date(joined));
 
       try {
         await updateStudent(student.id, updates);
         showNotification('Student updated', 'success');
         await this.loadStudents();
-        this.renderStudentsTab();
+        this.renderActiveTab();
       } catch (err) {
         console.error('Failed to update student', err);
         showNotification('Failed to update student', 'error');
@@ -776,6 +1011,415 @@ export class AdminDashboard {
     const cancelBtn = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
     const modal = createModal('Edit Student', form, [saveBtn, cancelBtn]);
     document.body.appendChild(modal);
+  }
+
+  renderManageClassesStudentsTab() {
+    const tab = document.getElementById('manageTab');
+    clearElement(tab);
+
+    const header = document.createElement('div');
+    header.className = 'flex-between mb-lg';
+    header.innerHTML = `
+      <div>
+        <h2>Class Management</h2>
+        <p class="text-muted">Review class rosters, move students to a new primary class, or add them to shared general classes.</p>
+      </div>
+    `;
+
+    const actionWrap = document.createElement('div');
+    actionWrap.className = 'flex gap-md';
+    actionWrap.style.flexWrap = 'wrap';
+
+    const addStudentBtn = createButton('New Student', () => this.showAddStudentModal(), { className: 'btn-secondary' });
+    const addClassBtn = createButton('New Class', () => this.showAddClassModal({
+      onCreated: async classId => {
+        this.manageTargetClassId = classId;
+      }
+    }), { className: 'btn-primary' });
+    actionWrap.append(addStudentBtn, addClassBtn);
+    header.appendChild(actionWrap);
+    tab.appendChild(header);
+
+    if (this.isLoading) {
+      tab.appendChild(createTableSkeleton(6, 6));
+      return;
+    }
+
+    if (!this.classes.length) {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted';
+      empty.textContent = 'No classes available yet. Create a class to start managing student assignments.';
+      tab.appendChild(empty);
+      return;
+    }
+
+    this.ensureManageSelectionState();
+
+    const selectedClass = this.getClassRecordById(this.manageSelectedClassId) || this.classes[0];
+    const roster = this.getStudentsForClass(selectedClass.id).sort((left, right) =>
+      String(left?.name || '').localeCompare(String(right?.name || ''), undefined, { sensitivity: 'base' })
+    );
+    const selectedStudents = roster.filter(student => this.manageSelectedStudentIds.has(student.id));
+
+    const controlsCard = document.createElement('div');
+    controlsCard.className = 'card mb-lg';
+
+    const controlsBody = document.createElement('div');
+    controlsBody.className = 'card-body';
+
+    const sourceLabel = document.createElement('p');
+    sourceLabel.className = 'text-muted';
+    sourceLabel.textContent = 'Choose a class to review, then select the students you want to update.';
+
+    const sourceClassSelect = createSelect(
+      this.classes.map(classRecord => ({ label: classRecord.name, value: classRecord.id })),
+      'manageSourceClassSelect',
+      selectedClass.id
+    );
+    sourceClassSelect.value = selectedClass.id;
+
+    const targetClassOptions = [
+      { label: 'Choose destination class...', value: '' },
+      ...this.classes
+        .filter(classRecord => classRecord.id !== selectedClass.id)
+        .map(classRecord => ({ label: classRecord.name, value: classRecord.id }))
+    ];
+    const targetClassSelect = createSelect(targetClassOptions, 'manageTargetClassSelect', this.manageTargetClassId || '');
+    targetClassSelect.value = this.manageTargetClassId || '';
+
+    sourceClassSelect.addEventListener('change', () => {
+      this.manageSelectedClassId = sourceClassSelect.value;
+      this.manageSelectedStudentIds.clear();
+      this.ensureManageSelectionState();
+      this.renderManageClassesStudentsTab();
+    });
+
+    targetClassSelect.addEventListener('change', () => {
+      this.manageTargetClassId = targetClassSelect.value;
+    });
+
+    const sourceRow = document.createElement('div');
+    sourceRow.className = 'flex gap-md mb-md';
+    sourceRow.style.flexWrap = 'wrap';
+    sourceRow.append(sourceClassSelect, targetClassSelect);
+
+    const summary = document.createElement('p');
+    summary.className = 'text-muted';
+    summary.textContent = `${roster.length} student${roster.length === 1 ? '' : 's'} in ${selectedClass.name}. ${selectedStudents.length} selected.`;
+
+    if (selectedClass.isGeneralClass) {
+      const generalNote = document.createElement('p');
+      generalNote.className = 'text-muted';
+      generalNote.textContent = 'This is a shared general class. Students marked Shared still belong to another primary class.';
+      controlsBody.append(sourceLabel, sourceRow, summary, generalNote);
+    } else {
+      controlsBody.append(sourceLabel, sourceRow, summary);
+    }
+
+    const selectedActions = document.createElement('div');
+    selectedActions.className = 'flex gap-md mb-md';
+    selectedActions.style.flexWrap = 'wrap';
+
+    const selectAllBtn = createButton('Select All', () => {
+      this.manageSelectedStudentIds = new Set(roster.map(student => student.id));
+      this.renderManageClassesStudentsTab();
+    }, { className: 'btn-secondary' });
+
+    const clearSelectionBtn = createButton('Clear Selection', () => {
+      this.manageSelectedStudentIds.clear();
+      this.renderManageClassesStudentsTab();
+    }, { className: 'btn-secondary' });
+
+    const addSelectedBtn = createButton('Add Selected to Class', async () => {
+      const currentSelectedStudents = roster.filter(student => this.manageSelectedStudentIds.has(student.id));
+      const targetClassId = targetClassSelect.value;
+      if (!currentSelectedStudents.length) {
+        showNotification('Select at least one student first', 'warning');
+        return;
+      }
+      if (!targetClassId) {
+        showNotification('Choose a target class first', 'warning');
+        return;
+      }
+
+      const targetClassName = this.getClassName(targetClassId, 'the selected class');
+      const confirmed = await this.confirmAction(
+        'Add selected students',
+        `Add ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> without changing their primary class?`
+      );
+      if (!confirmed) return;
+
+      try {
+        const updatedCount = await bulkAssignStudentsToClass(currentSelectedStudents, targetClassId, 'add');
+        await this.reloadCoreData();
+        this.manageSelectedStudentIds.clear();
+        this.renderManageClassesStudentsTab();
+        if (updatedCount > 0) {
+          showNotification(`Added ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
+        } else {
+          showNotification(`Selected students are already in ${targetClassName}`, 'warning');
+        }
+      } catch (error) {
+        console.error('Failed to add selected students to class', error);
+        showNotification('Failed to add selected students to class', 'error');
+      }
+    }, { className: 'btn-secondary' });
+
+    const moveSelectedBtn = createButton('Move Selected to Class', async () => {
+      const currentSelectedStudents = roster.filter(student => this.manageSelectedStudentIds.has(student.id));
+      const targetClassId = targetClassSelect.value;
+      if (!currentSelectedStudents.length) {
+        showNotification('Select at least one student first', 'warning');
+        return;
+      }
+      if (!targetClassId) {
+        showNotification('Choose a target class first', 'warning');
+        return;
+      }
+
+      const targetClassName = this.getClassName(targetClassId, 'the selected class');
+      const confirmed = await this.confirmAction(
+        'Move selected students',
+        `Move ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> as their new primary class?`
+      );
+      if (!confirmed) return;
+
+      try {
+        const updatedCount = await bulkAssignStudentsToClass(currentSelectedStudents, targetClassId, 'move');
+        await this.reloadCoreData();
+        this.manageSelectedStudentIds.clear();
+        this.renderManageClassesStudentsTab();
+        if (updatedCount > 0) {
+          showNotification(`Moved ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
+        } else {
+          showNotification(`Selected students are already assigned to ${targetClassName}`, 'warning');
+        }
+      } catch (error) {
+        console.error('Failed to move selected students to class', error);
+        showNotification('Failed to move selected students to class', 'error');
+      }
+    }, { className: 'btn-primary' });
+
+    const removeSelectedBtn = createButton('Remove Selected from Class', async () => {
+      const currentSelectedStudents = roster.filter(student => this.manageSelectedStudentIds.has(student.id));
+      if (!currentSelectedStudents.length) {
+        showNotification('Select at least one student first', 'warning');
+        return;
+      }
+
+      const confirmed = await this.confirmAction(
+        'Remove selected students from class',
+        `Remove shared enrollments for ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} from <strong>${selectedClass.name}</strong>? Primary class assignments will stay untouched.`
+      );
+      if (!confirmed) return;
+
+      try {
+        const updatedCount = await bulkRemoveStudentsFromClass(currentSelectedStudents, selectedClass.id);
+        await this.reloadCoreData();
+        this.manageSelectedStudentIds.clear();
+        this.renderManageClassesStudentsTab();
+        if (updatedCount > 0) {
+          showNotification(`Removed ${updatedCount} shared enrollment${updatedCount === 1 ? '' : 's'} from ${selectedClass.name}`, 'success');
+        } else {
+          showNotification('Only shared class enrollments can be removed here', 'warning');
+        }
+      } catch (error) {
+        console.error('Failed to remove students from class', error);
+        showNotification('Failed to remove students from class', 'error');
+      }
+    }, { className: 'btn-secondary' });
+
+    selectedActions.append(selectAllBtn, clearSelectionBtn, addSelectedBtn, moveSelectedBtn, removeSelectedBtn);
+    controlsBody.appendChild(selectedActions);
+    controlsCard.appendChild(controlsBody);
+    tab.appendChild(controlsCard);
+
+    const rosterRows = roster.map(student => {
+      const membershipType = getStudentMembershipType(student, selectedClass.id);
+
+      return {
+        'Select': () => {
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = this.manageSelectedStudentIds.has(student.id);
+          checkbox.addEventListener('change', () => {
+            if (checkbox.checked) this.manageSelectedStudentIds.add(student.id);
+            else this.manageSelectedStudentIds.delete(student.id);
+            this.renderManageClassesStudentsTab();
+          });
+          return checkbox;
+        },
+        'Name': student.name || '—',
+        'Class Role': membershipType === 'primary' ? 'Primary class' : 'Shared class',
+        'Primary Class': this.getClassName(student.classId),
+        'Shared Classes': this.getSharedClassNames(student),
+        'Email': student.email || '—',
+        'Actions': () => {
+          const wrap = document.createElement('div');
+          wrap.style.display = 'flex';
+          wrap.style.gap = '0.5rem';
+          wrap.style.flexWrap = 'wrap';
+
+          const editBtn = createButton('Edit', () => this.showEditStudentModal(student), { className: 'btn-secondary btn-small' });
+          wrap.appendChild(editBtn);
+
+          if (membershipType === 'shared') {
+            const removeBtn = createButton('Remove from Class', async () => {
+              const confirmed = await this.confirmAction(
+                'Remove student from class',
+                `Remove <strong>${student.name || 'this student'}</strong> from <strong>${selectedClass.name}</strong>? Their primary class stays the same.`
+              );
+              if (!confirmed) return;
+
+              try {
+                await bulkRemoveStudentsFromClass([student], selectedClass.id);
+                await this.reloadCoreData();
+                this.manageSelectedStudentIds.delete(student.id);
+                this.renderManageClassesStudentsTab();
+                showNotification(`Removed ${student.name || 'student'} from ${selectedClass.name}`, 'success');
+              } catch (error) {
+                console.error('Failed to remove student from class', error);
+                showNotification('Failed to remove student from class', 'error');
+              }
+            }, { className: 'btn-danger btn-small' });
+            wrap.appendChild(removeBtn);
+          }
+
+          return wrap;
+        }
+      };
+    });
+
+    if (rosterRows.length) {
+      tab.appendChild(createTable(['Select', 'Name', 'Class Role', 'Primary Class', 'Shared Classes', 'Email', 'Actions'], rosterRows));
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted';
+      empty.textContent = `No students are currently assigned to ${selectedClass.name}.`;
+      tab.appendChild(empty);
+    }
+
+    const allStudentsCard = document.createElement('div');
+    allStudentsCard.className = 'card mt-lg';
+    allStudentsCard.innerHTML = '<div class="card-header">General Class Actions for Everyone</div>';
+
+    const allStudentsBody = document.createElement('div');
+    allStudentsBody.className = 'card-body';
+
+    const allStudentsNote = document.createElement('p');
+    allStudentsNote.className = 'text-muted';
+    allStudentsNote.textContent = "Add keeps students in their current primary class. Move changes every student's primary class.";
+    allStudentsBody.appendChild(allStudentsNote);
+
+    const generalClassSelect = createSelect(
+      [{ label: 'Choose general class...', value: '' }, ...this.getGeneralClasses().map(classRecord => ({ label: classRecord.name, value: classRecord.id }))],
+      'manageGeneralClassSelect',
+      this.manageGeneralTargetClassId || ''
+    );
+    generalClassSelect.value = this.manageGeneralTargetClassId || '';
+    generalClassSelect.addEventListener('change', () => {
+      this.manageGeneralTargetClassId = generalClassSelect.value;
+    });
+
+    allStudentsBody.appendChild(generalClassSelect);
+
+    const allStudentsActions = document.createElement('div');
+    allStudentsActions.className = 'flex gap-md mt-md';
+    allStudentsActions.style.flexWrap = 'wrap';
+
+    const addAllToSelectedBtn = createButton('Add Everyone to Class', async () => {
+      const targetClassId = generalClassSelect.value;
+      if (!targetClassId) {
+        showNotification('Choose a general class first', 'warning');
+        return;
+      }
+
+      const targetClassName = this.getClassName(targetClassId, 'the selected class');
+      const confirmed = await this.confirmAction(
+        'Add everyone to class',
+        `Add all ${this.students.length} student${this.students.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> while keeping their current primary class assignments?`
+      );
+      if (!confirmed) return;
+
+      try {
+        const updatedCount = await bulkAssignStudentsToClass(this.students, targetClassId, 'add');
+        await this.reloadCoreData();
+        this.renderManageClassesStudentsTab();
+        if (updatedCount > 0) {
+          showNotification(`Added ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
+        } else {
+          showNotification(`All students are already enrolled in ${targetClassName}`, 'warning');
+        }
+      } catch (error) {
+        console.error('Failed to add all students to general class', error);
+        showNotification('Failed to add all students to the selected class', 'error');
+      }
+    }, { className: 'btn-secondary' });
+
+    const moveAllToSelectedBtn = createButton('Move Everyone to Class', async () => {
+      const targetClassId = generalClassSelect.value;
+      if (!targetClassId) {
+        showNotification('Choose a general class first', 'warning');
+        return;
+      }
+
+      const targetClassName = this.getClassName(targetClassId, 'the selected class');
+      const confirmed = await this.confirmAction(
+        'Move all students to class',
+        `Move all ${this.students.length} student${this.students.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> as their primary class?`,
+        { confirmText: 'Move Everyone', confirmClassName: 'btn-danger' }
+      );
+      if (!confirmed) return;
+
+      try {
+        const updatedCount = await bulkAssignStudentsToClass(this.students, targetClassId, 'move');
+        await this.reloadCoreData();
+        this.manageSelectedStudentIds.clear();
+        this.renderManageClassesStudentsTab();
+        if (updatedCount > 0) {
+          showNotification(`Moved ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
+        } else {
+          showNotification(`All students are already assigned to ${targetClassName}`, 'warning');
+        }
+      } catch (error) {
+        console.error('Failed to move all students to class', error);
+        showNotification('Failed to move all students to the selected class', 'error');
+      }
+    }, { className: 'btn-danger' });
+
+    const addAllToCoreGeneralClassesBtn = createButton('Add Everyone to Core General Classes', async () => {
+      const confirmed = await this.confirmAction(
+        'Add everyone to core general classes',
+        "Create any missing core general classes and enroll every student in all of them without changing anyone's primary class?"
+      );
+      if (!confirmed) return;
+
+      try {
+        await ensureGeneralClasses();
+        await this.reloadCoreData();
+
+        let totalUpdates = 0;
+        for (const classRecord of this.getGeneralClasses()) {
+          totalUpdates += await bulkAssignStudentsToClass(this.students, classRecord.id, 'add');
+        }
+
+        await this.reloadCoreData();
+        this.renderManageClassesStudentsTab();
+        if (totalUpdates > 0) {
+          showNotification(`Added ${totalUpdates} class enrollment${totalUpdates === 1 ? '' : 's'} across the core general classes`, 'success');
+        } else {
+          showNotification('All students are already enrolled in the core general classes', 'warning');
+        }
+      } catch (error) {
+        console.error('Failed to add all students to core general classes', error);
+        showNotification('Failed to add all students to the core general classes', 'error');
+      }
+    }, { className: 'btn-primary' });
+
+    allStudentsActions.append(addAllToSelectedBtn, moveAllToSelectedBtn, addAllToCoreGeneralClassesBtn);
+    allStudentsBody.appendChild(allStudentsActions);
+    allStudentsCard.appendChild(allStudentsBody);
+    tab.appendChild(allStudentsCard);
   }
 
   async renderAnalyticsTab() {

@@ -24,6 +24,259 @@ import {
   buildInstructorAttendanceLockError
 } from './instructor-attendance-lock.js';
 
+const CORE_GENERAL_CLASS_DEFINITIONS = [
+  { name: 'Institute of Religion', aliases: ['Institute'] },
+  { name: 'Temple & Family History', aliases: ['Family History', 'Temple and Family History'] },
+  { name: 'Temple Prep', aliases: ['Temple Preparation'] },
+  { name: 'Self-Reliance', aliases: ['Self Reliance'] }
+];
+
+export const CORE_GENERAL_CLASS_NAMES = CORE_GENERAL_CLASS_DEFINITIONS.map(item => item.name);
+
+function normalizeLookupValue(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function isKnownGeneralClassName(name = '') {
+  const normalizedName = normalizeLookupValue(name);
+  if (!normalizedName) return false;
+
+  return CORE_GENERAL_CLASS_DEFINITIONS.some(item =>
+    [item.name, ...(item.aliases || [])].some(alias => normalizeLookupValue(alias) === normalizedName)
+  );
+}
+
+function normalizeSharedClassIds(value) {
+  if (!Array.isArray(value)) return [];
+
+  return [...new Set(
+    value
+      .map(item => String(item || '').trim())
+      .filter(Boolean)
+  )];
+}
+
+function buildNormalizedClassRecord(id, data = {}) {
+  return {
+    ...data,
+    id,
+    name: data.name || '',
+    instructorId: data.instructorId || '',
+    isLocked: Boolean(data.isLocked),
+    isGeneralClass: Boolean(data.isGeneralClass || isKnownGeneralClassName(data.name)),
+    createdAt: data.createdAt || null
+  };
+}
+
+function buildNormalizedStudentRecord(id, data = {}) {
+  const normalized = Object.assign({}, data);
+
+  normalized.id = id;
+  normalized.name = data.name || data.fullName || data.Name || '';
+  normalized.classId = data.classId || data.class || data.class_id || '';
+  normalized.email = data.email || data.Email || '';
+  normalized.location = data.location || data.Location || '';
+  normalized.phoneNumber = data.phoneNumber || data['phone number'] || data.phone || '';
+  normalized.createdAt = data.createdAt || data.joinedAt || null;
+  normalized.sharedClassIds = normalizeSharedClassIds(
+    data.sharedClassIds || data.sharedClasses || data.secondaryClassIds || []
+  ).filter(classId => classId !== normalized.classId);
+
+  return normalized;
+}
+
+function dedupeStudentsById(students = []) {
+  const studentsById = new Map();
+
+  for (const student of students) {
+    if (!student?.id) continue;
+
+    const existing = studentsById.get(student.id);
+    if (!existing) {
+      studentsById.set(student.id, student);
+      continue;
+    }
+
+    studentsById.set(student.id, {
+      ...existing,
+      ...student,
+      sharedClassIds: normalizeSharedClassIds([
+        ...(existing.sharedClassIds || []),
+        ...(student.sharedClassIds || [])
+      ]).filter(classId => classId !== (student.classId || existing.classId || ''))
+    });
+  }
+
+  return Array.from(studentsById.values());
+}
+
+async function ensureClassesExist(classDefinitions = []) {
+  const classesRef = collection(db, "classes");
+  const snapshot = await getDocs(classesRef);
+  const existingDocs = snapshot.docs.map(docSnap => buildNormalizedClassRecord(docSnap.id, docSnap.data() || {}));
+  const existingByName = new Map(existingDocs.map(item => [normalizeLookupValue(item.name), item]));
+
+  let batch = writeBatch(db);
+  let batchOps = 0;
+
+  const commitBatchIfNeeded = async (force = false) => {
+    if (!batchOps) return;
+    if (!force && batchOps < 400) return;
+
+    await batch.commit();
+    batch = writeBatch(db);
+    batchOps = 0;
+  };
+
+  for (const definition of classDefinitions) {
+    const className = String(definition?.name || '').trim();
+    if (!className) continue;
+
+    const normalizedName = normalizeLookupValue(className);
+    const existing = existingByName.get(normalizedName);
+    const isGeneralClass = definition?.isGeneralClass ?? isKnownGeneralClassName(className);
+
+    if (!existing) {
+      const newDoc = doc(classesRef);
+      batch.set(newDoc, {
+        name: className,
+        instructorId: "",
+        isLocked: false,
+        isGeneralClass: Boolean(isGeneralClass),
+        createdAt: serverTimestamp()
+      });
+      batchOps += 1;
+      existingByName.set(normalizedName, buildNormalizedClassRecord(newDoc.id, {
+        name: className,
+        instructorId: "",
+        isLocked: false,
+        isGeneralClass
+      }));
+      await commitBatchIfNeeded();
+      continue;
+    }
+
+    if (isGeneralClass && !existing.isGeneralClass) {
+      batch.set(doc(classesRef, existing.id), { isGeneralClass: true }, { merge: true });
+      batchOps += 1;
+      existing.isGeneralClass = true;
+      await commitBatchIfNeeded();
+    }
+  }
+
+  await commitBatchIfNeeded(true);
+}
+
+async function commitStudentAssignmentUpdates(studentRecords = [], buildUpdates) {
+  const validStudents = Array.isArray(studentRecords)
+    ? studentRecords.filter(student => student?.id)
+    : [];
+
+  let batch = writeBatch(db);
+  let batchOps = 0;
+  let updatedCount = 0;
+
+  const commitBatchIfNeeded = async (force = false) => {
+    if (!batchOps) return;
+    if (!force && batchOps < 400) return;
+
+    await batch.commit();
+    batch = writeBatch(db);
+    batchOps = 0;
+  };
+
+  for (const student of validStudents) {
+    const updates = buildUpdates(buildNormalizedStudentRecord(student.id, student));
+    if (!updates) continue;
+
+    batch.set(doc(db, "students", student.id), updates, { merge: true });
+    batchOps += 1;
+    updatedCount += 1;
+
+    await commitBatchIfNeeded();
+  }
+
+  await commitBatchIfNeeded(true);
+  return updatedCount;
+}
+
+export function studentHasClass(student, classId) {
+  if (!student || !classId) return false;
+  if (student.classId === classId) return true;
+  return normalizeSharedClassIds(student.sharedClassIds).includes(classId);
+}
+
+export function getStudentMembershipType(student, classId) {
+  if (!studentHasClass(student, classId)) return '';
+  return student.classId === classId ? 'primary' : 'shared';
+}
+
+export async function ensureGeneralClasses() {
+  await ensureClassesExist(
+    CORE_GENERAL_CLASS_DEFINITIONS.map(item => ({
+      name: item.name,
+      isGeneralClass: true
+    }))
+  );
+}
+
+export async function bulkAssignStudentsToClass(studentRecords = [], targetClassId, mode = 'add') {
+  if (!targetClassId) {
+    throw new Error('bulkAssignStudentsToClass: targetClassId is required');
+  }
+
+  return commitStudentAssignmentUpdates(studentRecords, student => {
+    const sharedClassIds = normalizeSharedClassIds(student.sharedClassIds);
+
+    if (mode === 'move') {
+      const nextSharedClassIds = sharedClassIds.filter(classId => classId !== targetClassId);
+      if (student.classId === targetClassId && nextSharedClassIds.length === sharedClassIds.length) {
+        return null;
+      }
+
+      return {
+        classId: targetClassId,
+        sharedClassIds: nextSharedClassIds
+      };
+    }
+
+    if (student.classId === targetClassId || sharedClassIds.includes(targetClassId)) {
+      return null;
+    }
+
+    return {
+      sharedClassIds: [...sharedClassIds, targetClassId]
+    };
+  });
+}
+
+export async function bulkRemoveStudentsFromClass(studentRecords = [], classId) {
+  if (!classId) {
+    throw new Error('bulkRemoveStudentsFromClass: classId is required');
+  }
+
+  return commitStudentAssignmentUpdates(studentRecords, student => {
+    if (student.classId === classId) {
+      return null;
+    }
+
+    const sharedClassIds = normalizeSharedClassIds(student.sharedClassIds);
+    const nextSharedClassIds = sharedClassIds.filter(item => item !== classId);
+
+    if (nextSharedClassIds.length === sharedClassIds.length) {
+      return null;
+    }
+
+    return {
+      sharedClassIds: nextSharedClassIds
+    };
+  });
+}
+
 /* ===========================
    CLASS OPERATIONS
 =========================== */
@@ -34,10 +287,7 @@ export async function getClasses() {
 
   const snapshot = await getDocs(classesRef);
 
-  return snapshot.docs.map(doc => {
-    const d = doc.data() || {};
-    return Object.assign({}, d, { id: doc.id });
-  });
+  return snapshot.docs.map(docSnap => buildNormalizedClassRecord(docSnap.id, docSnap.data() || {}));
 
 }
 
@@ -49,10 +299,7 @@ export async function getClassById(classId) {
 
   if (!snapshot.exists()) return null;
 
-  return {
-    id: snapshot.id,
-    ...snapshot.data()
-  };
+  return buildNormalizedClassRecord(snapshot.id, snapshot.data() || {});
 
 }
 
@@ -162,50 +409,33 @@ export async function getStudents() {
 
   const snapshot = await getDocs(studentsRef);
 
-  // Normalize legacy/misnamed fields so UI doesn't show blanks when admins
-  // or manual DB edits used different field names.
-  return snapshot.docs.map(docSnap => {
-    const data = docSnap.data() || {};
-    // Build a normalized object but ensure the canonical Firestore doc id is preserved
-    const normalized = Object.assign({}, data);
-
-    normalized.id = docSnap.id; // always use doc id
-    normalized.name = data.name || data.fullName || data.Name || '';
-    normalized.classId = data.classId || data.class || data.class_id || '';
-    normalized.email = data.email || data.Email || '';
-    normalized.location = data.location || data.Location || '';
-    normalized.phoneNumber = data.phoneNumber || data['phone number'] || data.phone || '';
-    normalized.createdAt = data.createdAt || data.joinedAt || null;
-
-    return normalized;
-  });
+  return snapshot.docs.map(docSnap => buildNormalizedStudentRecord(docSnap.id, docSnap.data() || {}));
 
 }
 
 export async function getStudentsByClass(classId) {
+  if (!classId) return [];
 
   const studentsRef = collection(db, "students");
 
-  const q = query(
+  const primaryClassQuery = query(
     studentsRef,
     where("classId", "==", classId)
   );
+  const sharedClassQuery = query(
+    studentsRef,
+    where("sharedClassIds", "array-contains", classId)
+  );
 
-  const snapshot = await getDocs(q);
+  const [primarySnapshot, sharedSnapshot] = await Promise.all([
+    getDocs(primaryClassQuery),
+    getDocs(sharedClassQuery)
+  ]);
 
-  return snapshot.docs.map(doc => {
-    const d = doc.data() || {};
-    // Normalize legacy/misnamed fields similar to getStudents
-    const normalized = Object.assign({}, d);
-    normalized.id = doc.id;
-    normalized.name = d.name || d.fullName || d.Name || '';
-    normalized.classId = d.classId || d.class || d.class_id || '';
-    normalized.email = d.email || d.Email || '';
-    normalized.location = d.location || d.Location || '';
-    normalized.phoneNumber = d.phoneNumber || d['phone number'] || d.phone || '';
-    normalized.createdAt = d.createdAt || d.joinedAt || null;
-    return normalized;
-  });
+  return dedupeStudentsById([
+    ...primarySnapshot.docs.map(docSnap => buildNormalizedStudentRecord(docSnap.id, docSnap.data() || {})),
+    ...sharedSnapshot.docs.map(docSnap => buildNormalizedStudentRecord(docSnap.id, docSnap.data() || {}))
+  ]);
 
 }
 
@@ -216,6 +446,7 @@ export async function addStudent(name, classId, email = null, phoneNumber = null
   const studentData = {
     name,
     classId,
+    sharedClassIds: [],
     createdAt: joinedAt ? Timestamp.fromDate(new Date(joinedAt)) : serverTimestamp()
   };
 
@@ -241,8 +472,12 @@ export async function updateStudent(studentId, updates) {
 
   if (!studentId) throw new Error('updateStudent: missing studentId');
   const studentRef = doc(db, "students", studentId);
+  const normalizedUpdates = { ...updates };
+  if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'sharedClassIds')) {
+    normalizedUpdates.sharedClassIds = normalizeSharedClassIds(normalizedUpdates.sharedClassIds);
+  }
   // Use setDoc with merge to be tolerant of missing documents and create/merge fields
-  await setDoc(studentRef, updates, { merge: true });
+  await setDoc(studentRef, normalizedUpdates, { merge: true });
 
 }
 
@@ -496,13 +731,6 @@ function calculateGraduationScore(attendanceRate, performanceRating) {
 =========================== */
 
 export async function initializeClasses() {
-
-  const classesRef = collection(db, "classes");
-
-  const snapshot = await getDocs(classesRef);
-
-  if (!snapshot.empty) return;
-
   const defaultClasses = [
     "ICT",
     "Barbing",
@@ -517,21 +745,16 @@ export async function initializeClasses() {
     "BYU Pathway",
     "Guest",
     "Institute of Religion",
+    "Temple Prep",
     "Shoe Making"
   ];
 
-  for (const className of defaultClasses) {
-
-    const newDoc = doc(classesRef);
-
-    await setDoc(newDoc, {
+  await ensureClassesExist(
+    defaultClasses.map(className => ({
       name: className,
-      instructorId: "",
-      isLocked: false,
-      createdAt: serverTimestamp()
-    });
-
-  }
+      isGeneralClass: isKnownGeneralClassName(className)
+    }))
+  );
 
 }
 
@@ -751,14 +974,19 @@ export async function getGraduationOverview(classIds = []) {
   };
 }
 
-export async function createClass(name) {
+export async function createClass(name, options = {}) {
+  const className = String(name || '').trim();
+  if (!className) {
+    throw new Error('createClass: name is required');
+  }
 
   const classesRef = collection(db, "classes");
 
   const docRef = await addDoc(classesRef, {
-    name,
+    name: className,
     instructorId: "",
     isLocked: false,
+    isGeneralClass: options?.isGeneralClass ?? isKnownGeneralClassName(className),
     createdAt: serverTimestamp()
   });
 
@@ -888,7 +1116,7 @@ export function getNextClassDates(daysAhead = 30) {
   const schedule = {
     'Monday': { type: 'Family Home Evening', classes: [] },
     'Wednesday': { type: 'Skill Acquisition', classes: ['ICT', 'Barbing', 'Catering', 'Fashion/Tailoring', 'Makeup/Facial Stylists', 'Hair Making/Dressing', 'Bag Making', 'Shoe Making'] },
-    'Thursday': { type: 'Self-Reliance & Spiritual', classes: ['Self-Reliance', 'BYU Pathway', 'Institute of Religion', 'Temple & Family History', 'Mission Preparation'] },
+    'Thursday': { type: 'Self-Reliance & Spiritual', classes: ['Self-Reliance', 'BYU Pathway', 'Institute of Religion', 'Temple & Family History', 'Temple Prep', 'Mission Preparation'] },
     'Friday': { type: 'Skill Acquisition', classes: ['ICT', 'Barbing', 'Catering', 'Fashion/Tailoring', 'Makeup/Facial Stylists', 'Hair Making/Dressing', 'Bag Making', 'Shoe Making'] }
   };
 

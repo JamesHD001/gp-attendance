@@ -401,6 +401,11 @@ textarea {
   animation: slideUp 0.3s ease;
 }
 
+.modal-content.modal-content-wide {
+  width: min(1200px, 96vw);
+  max-width: 96vw;
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(20px);
@@ -444,6 +449,10 @@ textarea {
 
 .modal-body {
   padding: var(--spacing-lg);
+}
+
+.participants-modal .modal-body {
+  overflow-x: auto;
 }
 
 .modal-footer {
