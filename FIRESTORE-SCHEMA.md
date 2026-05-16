@@ -10,6 +10,8 @@ This document describes the recommended Firestore collections, documents, and fi
     - `email`: string
     - `role`: string — one of `admin`, `instructor`, `leader`
     - `assignedClassId`: string (nullable) — used for instructors
+    - `phoneNumber`: string (optional)
+    - `address`: string (optional)
     - `createdAt`: timestamp
 
 - `classes` (document id = auto-generated)

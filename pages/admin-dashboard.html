@@ -17,13 +17,22 @@
         <nav class="sidebar">
             <h2 style="color: var(--primary-blue); margin-bottom: var(--spacing-xl);">YSA</h2>
             <ul class="nav">
-                <li class="nav-item"><a href="#overview"    class="nav-link active">Dashboard</a></li>
-                <li class="nav-item"><a href="#classes"     class="nav-link">Classes</a></li>
-                <li class="nav-item"><a href="#manage"      class="nav-link">Class Management</a></li>
-                <li class="nav-item"><a href="#users"       class="nav-link">Users</a></li>
-                <li class="nav-item"><a href="#attendance"  class="nav-link">Students</a></li>
-                <li class="nav-item"><a href="#analytics"   class="nav-link">Analytics</a></li>
-                <li class="nav-item"><a href="#graduation"  class="nav-link">Graduation</a></li>
+                <li class="nav-item nav-item-dashboard">
+                    <a id="dashboardNavToggle" href="#overview" class="nav-link nav-link-toggle active" aria-expanded="true" aria-controls="dashboardSubmenu">
+                        <span>Dashboard</span>
+                        <span class="nav-caret">v</span>
+                    </a>
+                    <ul id="dashboardSubmenu" class="nav-submenu">
+                        <li class="nav-subitem"><a href="#overview" class="nav-sublink active" data-tab="overview">Overview</a></li>
+                        <li class="nav-subitem"><a href="#classes" class="nav-sublink" data-tab="classes">Classes</a></li>
+                        <li class="nav-subitem"><a href="#graduation" class="nav-sublink" data-tab="graduation">Graduation</a></li>
+                        <li class="nav-subitem"><a href="#students" class="nav-sublink" data-tab="students">Students</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item"><a href="#settings" class="nav-link" data-tab="settings">Settings</a></li>
+                <li class="nav-item"><a href="#users" class="nav-link" data-tab="users">Users</a></li>
+                <li class="nav-item"><a href="#analytics" class="nav-link" data-tab="analytics">Analytics</a></li>
+                <li class="nav-item nav-item-logout"><button id="logoutBtn" class="sidebar-nav-action" type="button">Logout</button></li>
             </ul>
         </nav>
 
@@ -36,27 +45,6 @@
         <p>&copy; 2026 IJEBU-ODE STAKE YSA GP</p>
         <span id="datetime"></span>
     </footer>
-
-    <style>
-        .tab-navigation {
-            display: flex;
-            gap: var(--spacing-md);
-            border-bottom: var(--border-width) solid var(--border-color);
-            margin-bottom: var(--spacing-lg);
-        }
-        .tab-btn {
-            padding: var(--spacing-md) var(--spacing-lg);
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--text-dark);
-            font-weight: 500;
-            border-bottom: 3px solid transparent;
-            transition: var(--transition);
-        }
-        .tab-btn:hover  { color: var(--primary-blue); }
-        .tab-btn.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
-    </style>
 
     <!-- BUG FIX: live clock — was defined in HTML but never populated -->
     <script>

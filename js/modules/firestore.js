@@ -72,6 +72,20 @@ function buildNormalizedClassRecord(id, data = {}) {
   };
 }
 
+function buildNormalizedUserRecord(id, data = {}) {
+  return {
+    ...data,
+    id,
+    name: data.name || data.fullName || '',
+    email: data.email || '',
+    role: data.role || '',
+    assignedClassId: data.assignedClassId || data.assignedClass || null,
+    phoneNumber: data.phoneNumber || data.phone || '',
+    address: data.address || data.location || '',
+    createdAt: data.createdAt || null
+  };
+}
+
 function buildNormalizedStudentRecord(id, data = {}) {
   const normalized = Object.assign({}, data);
 
@@ -347,10 +361,7 @@ export async function getUserData(uid) {
 
   if (!snapshot.exists()) return null;
 
-  return {
-    id: snapshot.id,
-    ...snapshot.data()
-  };
+  return buildNormalizedUserRecord(snapshot.id, snapshot.data() || {});
 
 }
 
@@ -360,10 +371,7 @@ export async function getAllUsers() {
 
   const snapshot = await getDocs(usersRef);
 
-  return snapshot.docs.map(doc => {
-    const d = doc.data() || {};
-    return Object.assign({}, d, { id: doc.id });
-  });
+  return snapshot.docs.map(docSnap => buildNormalizedUserRecord(docSnap.id, docSnap.data() || {}));
 
 }
 

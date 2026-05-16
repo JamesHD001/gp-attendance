@@ -6,13 +6,13 @@ import {
   updateClassLockStatus, updateClassInstructor, deleteUser, addStudent, getStudents, getStudentsByClass,
   deleteStudent, getUserData, createSession, getGatheringPlaceStats,
   getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions, updateStudent,
-  ensureGeneralClasses, bulkAssignStudentsToClass, bulkRemoveStudentsFromClass,
+  ensureGeneralClasses, bulkAssignStudentsToClass, bulkRemoveStudentsFromClass, updateUser,
   studentHasClass, getStudentMembershipType
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-app.js';
-import { getAuth, createUserWithEmailAndPassword, signOut as signOutSecondaryAuth } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js';
+import { getAuth, createUserWithEmailAndPassword, signOut as signOutSecondaryAuth, updateEmail as updateAuthEmail } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js';
 import { doc, setDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
 import {
   clearElement, showNotification, createTable, createCard,
@@ -34,6 +34,7 @@ export class AdminDashboard {
     this.isDemoMode = false;
     this.isLoading = true;
     this.currentTab = 'overview';
+    this.currentUserProfile = null;
     this.eventListenersInitialized = false;
     this._fetchingUserIds = new Set();
     this.manageSelectedClassId = '';
@@ -54,6 +55,7 @@ export class AdminDashboard {
       this.renderDashboard();
       this.attachFreshEventListeners();
       try {
+        await this.loadCurrentUserProfile();
         await this.loadClasses();
         await this.loadUsers();
         await this.loadStudents();
@@ -84,6 +86,7 @@ export class AdminDashboard {
         this.renderDashboard();
         this.attachFreshEventListeners();
         await initializeClasses();
+        await this.loadCurrentUserProfile();
         await this.loadClasses();
         await this.loadUsers();
         await this.loadStudents();
@@ -108,12 +111,98 @@ export class AdminDashboard {
     catch (e) { console.error(e); showNotification('Failed to load classes', 'error'); }
   }
   async loadUsers() {
-    try { this.users = await getAllUsers(); }
+    try {
+      this.users = await getAllUsers();
+      if (this.currentUser?.uid) {
+        this.currentUserProfile = this.users.find(user => user.id === this.currentUser.uid) || this.currentUserProfile;
+      }
+    }
     catch (e) { console.error(e); }
   }
   async loadStudents() {
     try { this.students = await getStudents(); }
     catch (e) { console.error(e); }
+  }
+
+  async loadCurrentUserProfile() {
+    if (!this.currentUser?.uid) {
+      this.currentUserProfile = null;
+      return;
+    }
+
+    if (this.isDemoMode) {
+      this.currentUserProfile = {
+        id: this.currentUser.uid,
+        name: this.currentUser.displayName || 'Local Admin',
+        email: this.currentUser.email || 'admin@example.test',
+        role: 'admin',
+        phoneNumber: '',
+        address: ''
+      };
+      return;
+    }
+
+    try {
+      this.currentUserProfile = await getUserData(this.currentUser.uid);
+    } catch (error) {
+      console.error('Failed to load current user profile', error);
+    }
+  }
+
+  isDashboardTab(tabName) {
+    return ['overview', 'classes', 'graduation', 'students'].includes(tabName);
+  }
+
+  getTabFromHash(hashValue = '') {
+    const key = (hashValue || '').replace('#', '');
+    const map = {
+      dashboard: 'overview',
+      overview: 'overview',
+      classes: 'classes',
+      graduation: 'graduation',
+      attendance: 'students',
+      students: 'students',
+      settings: 'settings',
+      users: 'users',
+      analytics: 'analytics'
+    };
+
+    return map[key] || '';
+  }
+
+  setDashboardMenuOpen(isOpen) {
+    const dashboardToggle = document.getElementById('dashboardNavToggle');
+    const dashboardSubmenu = document.getElementById('dashboardSubmenu');
+
+    if (dashboardSubmenu) {
+      dashboardSubmenu.classList.toggle('hidden', !isOpen);
+    }
+
+    if (dashboardToggle) {
+      dashboardToggle.setAttribute('aria-expanded', String(isOpen));
+      dashboardToggle.classList.toggle('is-expanded', isOpen);
+    }
+  }
+
+  syncSidebarNavigation(activeTab = this.currentTab) {
+    const dashboardToggle = document.getElementById('dashboardNavToggle');
+    const submenuLinks = document.querySelectorAll('.nav-sublink[data-tab]');
+    const directLinks = document.querySelectorAll('.nav-link[data-tab]');
+    const dashboardTabActive = this.isDashboardTab(activeTab);
+
+    submenuLinks.forEach(link => {
+      link.classList.toggle('active', link.dataset.tab === activeTab);
+    });
+
+    directLinks.forEach(link => {
+      link.classList.toggle('active', !dashboardTabActive && link.dataset.tab === activeTab);
+    });
+
+    if (dashboardToggle) {
+      dashboardToggle.classList.toggle('active', dashboardTabActive);
+    }
+
+    this.setDashboardMenuOpen(dashboardTabActive);
   }
 
   getClassRecordById(classId) {
@@ -204,9 +293,9 @@ export class AdminDashboard {
 
   renderActiveTab() {
     if (this.currentTab === 'classes') { this.renderClassesTab(); return; }
+    if (this.currentTab === 'settings') { this.renderSettingsTab(); return; }
     if (this.currentTab === 'users') { this.renderUsersTab(); return; }
     if (this.currentTab === 'students') { this.renderStudentsTab(); return; }
-    if (this.currentTab === 'manage') { this.renderManageClassesStudentsTab(); return; }
     if (this.currentTab === 'analytics') { this.renderAnalyticsTab(); return; }
     if (this.currentTab === 'graduation') { this.renderGraduationTab(); return; }
     this.renderOverviewTab();
@@ -245,93 +334,99 @@ export class AdminDashboard {
       await AuthService.logout();
     });
 
-    document.querySelectorAll('.tab-btn').forEach(btn =>
-      btn.addEventListener('click', (e) => this.switchTab(e.currentTarget.dataset.tab, e)));
+    document.getElementById('dashboardNavToggle')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      const dashboardSubmenu = document.getElementById('dashboardSubmenu');
+      const isOpen = dashboardSubmenu ? !dashboardSubmenu.classList.contains('hidden') : false;
 
-    const navLinks = document.querySelectorAll('.nav-link');
-    const mapHash = h => ({ overview:'overview', classes:'classes', manage:'manage', users:'users', attendance:'students', analytics:'analytics', graduation:'graduation' })[(h||'').replace('#','')] || (h||'').replace('#','');
+      if (!this.isDashboardTab(this.currentTab)) {
+        this.switchTab('overview', null);
+        try { history.replaceState(null, '', '#overview'); } catch (_) {}
+        return;
+      }
 
-    navLinks.forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const t = mapHash(link.getAttribute('href')||''); if(!t) return;
-        navLinks.forEach(n => n.classList.remove('active')); link.classList.add('active');
-        const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
-        if(btn) btn.click(); else this.switchTab(t, null);
-        try { history.replaceState(null, '', link.getAttribute('href')); } catch(e) {}
+      this.setDashboardMenuOpen(!isOpen);
+    });
+
+    document.querySelectorAll('.nav-sublink[data-tab]').forEach(link => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const tabName = link.dataset.tab;
+        if (!tabName) return;
+        this.switchTab(tabName, null);
+        try { history.replaceState(null, '', link.getAttribute('href') || `#${tabName}`); } catch (_) {}
+      });
+    });
+
+    document.querySelectorAll('.nav-link[data-tab]').forEach(link => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const tabName = link.dataset.tab;
+        if (!tabName) return;
+        this.switchTab(tabName, null);
+        try { history.replaceState(null, '', link.getAttribute('href') || `#${tabName}`); } catch (_) {}
       });
     });
 
     window.addEventListener('hashchange', () => {
-      const t = mapHash(location.hash); if(!t) return;
-      const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
-      if(btn) btn.click(); else this.switchTab(t, null);
+      const tabName = this.getTabFromHash(location.hash);
+      if (!tabName) return;
+      this.switchTab(tabName, null);
     });
 
-    if (location.hash) {
-      const t = mapHash(location.hash);
-      if(t) { const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`); if(btn) btn.click(); else this.switchTab(t,null); }
-    }
+    const initialTab = this.getTabFromHash(location.hash) || 'overview';
+    this.switchTab(initialTab, null, { force: true });
   }
 
-  switchTab(tabName, event) {
-    if (this.currentTab === tabName) return;
+  switchTab(tabName, event, options = {}) {
+    const { force = false } = options;
+    if (!force && this.currentTab === tabName) {
+      this.syncSidebarNavigation(tabName);
+      return;
+    }
     this.currentTab = tabName;
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     const targetTabEl = document.getElementById(`${tabName}Tab`);
     if (targetTabEl) {
       clearElement(targetTabEl);
       let skeletonEl = createTabSkeleton();
       if (tabName === 'classes') skeletonEl = createClassesSkeleton();
-      if (tabName === 'manage') skeletonEl = createStudentsSkeleton();
+      if (tabName === 'settings') skeletonEl = createTabSkeleton({ statsCount: 1, tableRows: 3, tableColumns: 2, showQuote: false });
       if (tabName === 'users') skeletonEl = createUsersSkeleton();
       if (tabName === 'students') skeletonEl = createStudentsSkeleton();
-      if (tabName === 'attendance') skeletonEl = createAttendanceSkeleton();
       if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
       if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
       targetTabEl.appendChild(skeletonEl);
       targetTabEl.classList.remove('hidden');
     }
-    // FIX: null guard for hash/sidebar navigation
-    if (event?.target) event.target.classList.add('active');
+    this.syncSidebarNavigation(tabName);
     if (tabName === 'classes') this.renderClassesTab();
-    if (tabName === 'manage') this.renderManageClassesStudentsTab();
+    if (tabName === 'settings') this.renderSettingsTab();
     if (tabName === 'users') this.renderUsersTab();
     if (tabName === 'students') this.renderStudentsTab();
     if (tabName === 'analytics') this.renderAnalyticsTab();
     if (tabName === 'graduation') this.renderGraduationTab();
+    if (tabName === 'overview') this.renderOverviewTab();
   }
 
   renderDashboard() {
     const main = document.querySelector('.main-content');
     clearElement(main);
     const header = document.createElement('div');
-    header.className = 'flex-between mb-xl';
-    header.innerHTML = `<div><h1>GP Attendance Admin</h1><p class="text-muted">Manage gathering place classes, users, and students</p></div><button id="logoutBtn" class="btn btn-secondary">Logout</button>`;
+    header.className = 'mb-xl';
+    header.innerHTML = `<div><h1>GP Attendance Admin</h1><p class="text-muted">Manage gathering place classes, users, analytics, and your profile settings from one place.</p></div>`;
     main.appendChild(header);
-    const tabNav = document.createElement('div');
-    tabNav.className = 'tab-navigation mb-lg';
-    tabNav.innerHTML = `
-      <button class="tab-btn active" data-tab="overview">Overview</button>
-      <button class="tab-btn" data-tab="classes">Classes</button>
-      <button class="tab-btn" data-tab="manage">Class Management</button>
-      <button class="tab-btn" data-tab="users">Leaders / Instructors</button>
-      <button class="tab-btn" data-tab="students">Students</button>
-      <button class="tab-btn" data-tab="analytics">Attendance Reports</button>
-      <button class="tab-btn" data-tab="graduation">Graduation</button>`;
-    main.appendChild(tabNav);
     const tabs = document.createElement('div');
     tabs.innerHTML = `
-      <div id="overviewTab" class="tab-content"></div>
+      <div id="overviewTab" class="tab-content hidden"></div>
       <div id="classesTab" class="tab-content hidden"></div>
-      <div id="manageTab" class="tab-content hidden"></div>
+      <div id="settingsTab" class="tab-content hidden"></div>
       <div id="usersTab" class="tab-content hidden"></div>
       <div id="studentsTab" class="tab-content hidden"></div>
       <div id="analyticsTab" class="tab-content hidden"></div>
       <div id="graduationTab" class="tab-content hidden"></div>`;
     main.appendChild(tabs);
-    this.renderOverviewTab();
+    this.switchTab(this.currentTab || 'overview', null, { force: true });
   }
 
   renderOverviewTab() {
@@ -703,6 +798,7 @@ export class AdminDashboard {
       };
     });
     tab.appendChild(createTable(['Class Name', 'Type', 'Instructor', 'Participants', 'Status', 'Actions'], rows));
+    this.renderClassManagementSection(tab);
     document.getElementById('addClassBtn')?.addEventListener('click', () => this.showAddClassModal());
   }
 
@@ -750,6 +846,148 @@ export class AdminDashboard {
     const cancelBtn = createButton('Cancel', () => modal.remove());
     modal = createModal('Add New Class', form, [createBtn, cancelBtn]);
     document.body.appendChild(modal);
+  }
+
+  async renderSettingsTab() {
+    const tab = document.getElementById('settingsTab');
+    clearElement(tab);
+
+    const header = document.createElement('div');
+    header.className = 'flex-between mb-lg';
+    header.innerHTML = `
+      <div>
+        <h2>Settings</h2>
+        <p class="text-muted">Update your name and contact details. Password and verification tools will be added later.</p>
+      </div>
+    `;
+    tab.appendChild(header);
+
+    if (this.isLoading) {
+      tab.appendChild(createTabSkeleton({ statsCount: 1, tableRows: 3, tableColumns: 2, showQuote: false }));
+      return;
+    }
+
+    const profile = this.currentUserProfile || this.users.find(user => user.id === this.currentUser?.uid) || {
+      name: this.currentUser?.displayName || '',
+      email: this.currentUser?.email || '',
+      phoneNumber: '',
+      address: ''
+    };
+
+    const settingsCard = document.createElement('div');
+    settingsCard.className = 'card';
+    settingsCard.innerHTML = '<div class="card-header">Profile Settings</div>';
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const note = document.createElement('p');
+    note.className = 'text-muted';
+    note.textContent = 'Use the same email you want tied to this admin account. Some email changes may require a fresh sign-in before Firebase allows the update.';
+    body.appendChild(note);
+
+    const roleText = document.createElement('p');
+    roleText.className = 'text-muted';
+    roleText.textContent = `Role: ${profile.role || 'admin'}`;
+    body.appendChild(roleText);
+
+    const form = document.createElement('div');
+    form.style.display = 'flex';
+    form.style.flexDirection = 'column';
+    form.style.gap = '0.75rem';
+    form.style.maxWidth = '640px';
+
+    const nameInput = createInput('text', 'Full name', 'settingsName', { value: profile.name || '' });
+    const emailInput = createInput('email', 'Email address', 'settingsEmail', { value: profile.email || this.currentUser?.email || '' });
+    const phoneInput = createInput('text', 'Phone number', 'settingsPhone', { value: profile.phoneNumber || '' });
+    const addressInput = createInput('text', 'Address', 'settingsAddress', { value: profile.address || '' });
+
+    form.append(nameInput, emailInput, phoneInput, addressInput);
+    body.appendChild(form);
+
+    const actionRow = document.createElement('div');
+    actionRow.className = 'flex gap-md mt-lg';
+    actionRow.style.flexWrap = 'wrap';
+
+    const saveBtn = createButton('Save Changes', async () => {
+      const nextName = (nameInput.value || '').trim();
+      const nextEmail = (emailInput.value || '').trim();
+      const nextPhone = (phoneInput.value || '').trim();
+      const nextAddress = (addressInput.value || '').trim();
+
+      if (!nextName || !nextEmail) {
+        showNotification('Name and email are required', 'warning');
+        return;
+      }
+
+      if (!this.currentUser?.uid) {
+        showNotification('Unable to identify the current user', 'error');
+        return;
+      }
+
+      saveBtn.disabled = true;
+      let notificationType = 'success';
+      let notificationMessage = 'Settings updated successfully';
+
+      try {
+        if (this.isDemoMode) {
+          this.currentUserProfile = {
+            ...profile,
+            name: nextName,
+            email: nextEmail,
+            phoneNumber: nextPhone,
+            address: nextAddress
+          };
+          this.renderSettingsTab();
+          showNotification('Settings updated in local demo mode', 'success');
+          return;
+        }
+
+        const updates = {
+          name: nextName,
+          phoneNumber: nextPhone,
+          address: nextAddress
+        };
+
+        const currentEmail = profile.email || this.currentUser?.email || '';
+        if (nextEmail !== currentEmail) {
+          try {
+            if (auth.currentUser) {
+              await updateAuthEmail(auth.currentUser, nextEmail);
+            }
+            updates.email = nextEmail;
+          } catch (error) {
+            if (error?.code === 'auth/requires-recent-login') {
+              notificationType = 'warning';
+              notificationMessage = 'Name and contact details were saved, but email changes require you to log out and sign in again before retrying.';
+            } else if (error?.code === 'auth/invalid-email') {
+              throw new Error('Please enter a valid email address.');
+            } else if (error?.code === 'auth/email-already-in-use') {
+              throw new Error('That email address is already in use.');
+            } else {
+              throw error;
+            }
+          }
+        } else {
+          updates.email = nextEmail;
+        }
+
+        await updateUser(this.currentUser.uid, updates);
+        await Promise.all([this.loadUsers(), this.loadCurrentUserProfile()]);
+        this.renderSettingsTab();
+        showNotification(notificationMessage, notificationType);
+      } catch (error) {
+        console.error('Failed to update settings', error);
+        showNotification(error?.message || 'Failed to update settings', 'error');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }, { className: 'btn-primary' });
+
+    actionRow.appendChild(saveBtn);
+    body.appendChild(actionRow);
+    settingsCard.appendChild(body);
+    tab.appendChild(settingsCard);
   }
 
   async renderUsersTab() {
@@ -1013,15 +1251,15 @@ export class AdminDashboard {
     document.body.appendChild(modal);
   }
 
-  renderManageClassesStudentsTab() {
-    const tab = document.getElementById('manageTab');
-    clearElement(tab);
+  renderClassManagementSection(container) {
+    const section = document.createElement('section');
+    section.className = 'mt-xl';
 
     const header = document.createElement('div');
     header.className = 'flex-between mb-lg';
     header.innerHTML = `
       <div>
-        <h2>Class Management</h2>
+        <h2>Class Enrollment Management</h2>
         <p class="text-muted">Review class rosters, move students to a new primary class, or add them to shared general classes.</p>
       </div>
     `;
@@ -1038,10 +1276,11 @@ export class AdminDashboard {
     }), { className: 'btn-primary' });
     actionWrap.append(addStudentBtn, addClassBtn);
     header.appendChild(actionWrap);
-    tab.appendChild(header);
+    section.appendChild(header);
 
     if (this.isLoading) {
-      tab.appendChild(createTableSkeleton(6, 6));
+      section.appendChild(createTableSkeleton(6, 6));
+      container.appendChild(section);
       return;
     }
 
@@ -1049,7 +1288,8 @@ export class AdminDashboard {
       const empty = document.createElement('p');
       empty.className = 'text-muted';
       empty.textContent = 'No classes available yet. Create a class to start managing student assignments.';
-      tab.appendChild(empty);
+      section.appendChild(empty);
+      container.appendChild(section);
       return;
     }
 
@@ -1091,7 +1331,7 @@ export class AdminDashboard {
       this.manageSelectedClassId = sourceClassSelect.value;
       this.manageSelectedStudentIds.clear();
       this.ensureManageSelectionState();
-      this.renderManageClassesStudentsTab();
+      this.renderClassesTab();
     });
 
     targetClassSelect.addEventListener('change', () => {
@@ -1122,12 +1362,12 @@ export class AdminDashboard {
 
     const selectAllBtn = createButton('Select All', () => {
       this.manageSelectedStudentIds = new Set(roster.map(student => student.id));
-      this.renderManageClassesStudentsTab();
+      this.renderClassesTab();
     }, { className: 'btn-secondary' });
 
     const clearSelectionBtn = createButton('Clear Selection', () => {
       this.manageSelectedStudentIds.clear();
-      this.renderManageClassesStudentsTab();
+      this.renderClassesTab();
     }, { className: 'btn-secondary' });
 
     const addSelectedBtn = createButton('Add Selected to Class', async () => {
@@ -1153,7 +1393,7 @@ export class AdminDashboard {
         const updatedCount = await bulkAssignStudentsToClass(currentSelectedStudents, targetClassId, 'add');
         await this.reloadCoreData();
         this.manageSelectedStudentIds.clear();
-        this.renderManageClassesStudentsTab();
+        this.renderClassesTab();
         if (updatedCount > 0) {
           showNotification(`Added ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
         } else {
@@ -1188,7 +1428,7 @@ export class AdminDashboard {
         const updatedCount = await bulkAssignStudentsToClass(currentSelectedStudents, targetClassId, 'move');
         await this.reloadCoreData();
         this.manageSelectedStudentIds.clear();
-        this.renderManageClassesStudentsTab();
+        this.renderClassesTab();
         if (updatedCount > 0) {
           showNotification(`Moved ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
         } else {
@@ -1217,7 +1457,7 @@ export class AdminDashboard {
         const updatedCount = await bulkRemoveStudentsFromClass(currentSelectedStudents, selectedClass.id);
         await this.reloadCoreData();
         this.manageSelectedStudentIds.clear();
-        this.renderManageClassesStudentsTab();
+        this.renderClassesTab();
         if (updatedCount > 0) {
           showNotification(`Removed ${updatedCount} shared enrollment${updatedCount === 1 ? '' : 's'} from ${selectedClass.name}`, 'success');
         } else {
@@ -1232,7 +1472,7 @@ export class AdminDashboard {
     selectedActions.append(selectAllBtn, clearSelectionBtn, addSelectedBtn, moveSelectedBtn, removeSelectedBtn);
     controlsBody.appendChild(selectedActions);
     controlsCard.appendChild(controlsBody);
-    tab.appendChild(controlsCard);
+    section.appendChild(controlsCard);
 
     const rosterRows = roster.map(student => {
       const membershipType = getStudentMembershipType(student, selectedClass.id);
@@ -1245,7 +1485,7 @@ export class AdminDashboard {
           checkbox.addEventListener('change', () => {
             if (checkbox.checked) this.manageSelectedStudentIds.add(student.id);
             else this.manageSelectedStudentIds.delete(student.id);
-            this.renderManageClassesStudentsTab();
+            this.renderClassesTab();
           });
           return checkbox;
         },
@@ -1275,7 +1515,7 @@ export class AdminDashboard {
                 await bulkRemoveStudentsFromClass([student], selectedClass.id);
                 await this.reloadCoreData();
                 this.manageSelectedStudentIds.delete(student.id);
-                this.renderManageClassesStudentsTab();
+                this.renderClassesTab();
                 showNotification(`Removed ${student.name || 'student'} from ${selectedClass.name}`, 'success');
               } catch (error) {
                 console.error('Failed to remove student from class', error);
@@ -1291,12 +1531,12 @@ export class AdminDashboard {
     });
 
     if (rosterRows.length) {
-      tab.appendChild(createTable(['Select', 'Name', 'Class Role', 'Primary Class', 'Shared Classes', 'Email', 'Actions'], rosterRows));
+      section.appendChild(createTable(['Select', 'Name', 'Class Role', 'Primary Class', 'Shared Classes', 'Email', 'Actions'], rosterRows));
     } else {
       const empty = document.createElement('p');
       empty.className = 'text-muted';
       empty.textContent = `No students are currently assigned to ${selectedClass.name}.`;
-      tab.appendChild(empty);
+      section.appendChild(empty);
     }
 
     const allStudentsCard = document.createElement('div');
@@ -1344,7 +1584,7 @@ export class AdminDashboard {
       try {
         const updatedCount = await bulkAssignStudentsToClass(this.students, targetClassId, 'add');
         await this.reloadCoreData();
-        this.renderManageClassesStudentsTab();
+        this.renderClassesTab();
         if (updatedCount > 0) {
           showNotification(`Added ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
         } else {
@@ -1375,7 +1615,7 @@ export class AdminDashboard {
         const updatedCount = await bulkAssignStudentsToClass(this.students, targetClassId, 'move');
         await this.reloadCoreData();
         this.manageSelectedStudentIds.clear();
-        this.renderManageClassesStudentsTab();
+        this.renderClassesTab();
         if (updatedCount > 0) {
           showNotification(`Moved ${updatedCount} student${updatedCount === 1 ? '' : 's'} to ${targetClassName}`, 'success');
         } else {
@@ -1404,7 +1644,7 @@ export class AdminDashboard {
         }
 
         await this.reloadCoreData();
-        this.renderManageClassesStudentsTab();
+        this.renderClassesTab();
         if (totalUpdates > 0) {
           showNotification(`Added ${totalUpdates} class enrollment${totalUpdates === 1 ? '' : 's'} across the core general classes`, 'success');
         } else {
@@ -1419,7 +1659,8 @@ export class AdminDashboard {
     allStudentsActions.append(addAllToSelectedBtn, moveAllToSelectedBtn, addAllToCoreGeneralClassesBtn);
     allStudentsBody.appendChild(allStudentsActions);
     allStudentsCard.appendChild(allStudentsBody);
-    tab.appendChild(allStudentsCard);
+    section.appendChild(allStudentsCard);
+    container.appendChild(section);
   }
 
   async renderAnalyticsTab() {
