@@ -16,12 +16,12 @@
         <nav class="sidebar">
             <h2 style="color: var(--primary-blue); margin-bottom: var(--spacing-xl);">YSA</h2>
             <ul class="nav">
-                <li class="nav-item"><a href="#overview"    class="nav-link active">Dashboard</a></li>
-                <li class="nav-item"><a href="#students"    class="nav-link">Students</a></li>
-                <li class="nav-item"><a href="#attendance"  class="nav-link">Attendance</a></li>
-                <li class="nav-item"><a href="#performance" class="nav-link">Performance</a></li>
-                <li class="nav-item"><a href="#graduation"  class="nav-link">Graduation</a></li>
-                <li class="nav-item"><a href="#analytics"   class="nav-link">Analytics</a></li>
+                <li class="nav-item"><a href="#overview"    class="nav-link tab-btn active" data-tab="overview">Dashboard</a></li>
+                <li class="nav-item"><a href="#students"    class="nav-link tab-btn" data-tab="students">Students</a></li>
+                <li class="nav-item"><a href="#attendance"  class="nav-link tab-btn" data-tab="attendance">Attendance</a></li>
+                <li class="nav-item"><a href="#performance" class="nav-link tab-btn" data-tab="performance">Performance</a></li>
+                <li class="nav-item"><a href="#graduation"  class="nav-link tab-btn" data-tab="graduation">Graduation</a></li>
+                <li class="nav-item"><a href="#analytics"   class="nav-link tab-btn" data-tab="stats">Analytics</a></li>
             </ul>
         </nav>
 
@@ -42,7 +42,7 @@
             border-bottom: var(--border-width) solid var(--border-color);
             margin-bottom: var(--spacing-lg);
         }
-        .tab-btn {
+        .tab-navigation .tab-btn {
             padding: var(--spacing-md) var(--spacing-lg);
             background: none;
             border: none;
@@ -52,8 +52,8 @@
             border-bottom: 3px solid transparent;
             transition: var(--transition);
         }
-        .tab-btn:hover  { color: var(--primary-blue); }
-        .tab-btn.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
+        .tab-navigation .tab-btn:hover  { color: var(--primary-blue); }
+        .tab-navigation .tab-btn.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
     </style>
 
     <!-- BUG FIX: live clock -->

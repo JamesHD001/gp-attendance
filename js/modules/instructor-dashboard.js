@@ -5,7 +5,8 @@ import {
   getStudentsByClass, addStudent, deleteStudent, updateStudent,
   getSessionsByClass, createSession, deleteSession,
   getAttendanceBySession, getClassById,
-  getPerformanceRatingsByClass, savePerformanceRating, getStudentMembershipType
+  getPerformanceRatingsByClass, savePerformanceRating, getStudentMembershipType,
+  updateAttendance, getNextClassDates, calculateAttendanceStats, calculateGraduationStats
 } from './firestore.js';
 import {
   formatDate, createTable, createTableSkeleton,
@@ -32,7 +33,7 @@ export class InstructorDashboard {
     this.performanceRatings = [];
     this.isDemoMode = false;
     this.isLoading = true;
-    this.currentTab = 'students';
+    this.currentTab = 'overview';
     this.eventListenersInitialized = false;
     this.attendanceLockState = getInstructorAttendanceLockState();
     this.attendanceLockTickTimeout = null;
@@ -216,67 +217,220 @@ export class InstructorDashboard {
         </div>
         <button id="logoutBtn" class="btn btn-secondary">Logout</button>
       </div>
-      <nav class="tab-navigation mb-lg">
-        <button class="tab-btn active" data-tab="students">Students</button>
-        <button class="tab-btn" data-tab="attendance">Attendance</button>
-        <button class="tab-btn" data-tab="performance">Performance</button>
-        <button class="tab-btn" data-tab="graduation">Graduation</button>
-        <button class="tab-btn" data-tab="stats">Statistics</button>
-      </nav>
-      <div id="studentsTab" class="tab-content"></div>
+      <div id="overviewTab" class="tab-content"></div>
+      <div id="studentsTab" class="tab-content hidden"></div>
       <div id="attendanceTab" class="tab-content hidden"></div>
       <div id="performanceTab" class="tab-content hidden"></div>
       <div id="graduationTab" class="tab-content hidden"></div>
       <div id="statsTab" class="tab-content hidden"></div>
     `;
-    this.renderStudentsTab();
+    this.renderOverviewTab();
   }
 
   attachEventListeners() {
     if (this.eventListenersInitialized) return;
     this.eventListenersInitialized = true;
-    document.querySelectorAll(".tab-btn").forEach(btn =>
-      btn.addEventListener("click", (e) => this.switchTab(e.currentTarget.dataset.tab, e)));
-    const navLinks = document.querySelectorAll('.nav-link');
-    const mapHash = h => ({ overview:'students',students:'students',attendance:'attendance',performance:'performance',graduation:'graduation',analytics:'stats' })[(h||'').replace('#','')] || (h||'').replace('#','');
+
+    // Listen to click on sidebar links or any tab-btn elements
+    const navLinks = document.querySelectorAll('.sidebar .nav-link, .tab-btn');
+    const handled = new Set();
+    
     navLinks.forEach(link => {
+      if (handled.has(link)) return;
+      handled.add(link);
+      
       link.addEventListener('click', (e) => {
         e.preventDefault();
-        const t = mapHash(link.getAttribute('href')||''); if(!t) return;
-        navLinks.forEach(n=>n.classList.remove('active')); link.classList.add('active');
-        const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
-        if(btn) btn.click(); else this.switchTab(t, null);
+        const tabName = link.dataset.tab || link.getAttribute('data-tab');
+        if (tabName) {
+          this.switchTab(tabName);
+        } else {
+          // Fallback map hash for href attribute if data-tab is missing
+          const href = link.getAttribute('href') || '';
+          const hash = href.replace('#', '');
+          const mapped = { overview: 'overview', students: 'students', attendance: 'attendance', performance: 'performance', graduation: 'graduation', analytics: 'stats' }[hash] || hash;
+          if (mapped) {
+            this.switchTab(mapped);
+          }
+        }
       });
     });
+
     document.getElementById("logoutBtn")?.addEventListener("click", async () => {
       await AuthService.logout();
     });
   }
 
-  switchTab(tabName, event) {
+  switchTab(tabName) {
     if (this.currentTab === tabName) return;
     this.currentTab = tabName;
+
+    // Synchronize active states on ALL sidebar links and tab buttons
+    document.querySelectorAll('.sidebar .nav-link, .tab-btn').forEach(b => {
+      if (b.dataset.tab === tabName || b.getAttribute('data-tab') === tabName) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+    });
+
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    
     const targetTabEl = document.getElementById(`${tabName}Tab`);
     if (targetTabEl) {
       clearElement(targetTabEl);
       let skeletonEl = createTabSkeleton();
       if (tabName === 'students') skeletonEl = createStudentsSkeleton();
-      if (tabName === 'attendance') skeletonEl = createAttendanceSkeleton();
-      if (tabName === 'performance') skeletonEl = createPerformanceSkeleton();
-      if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
-      if (tabName === 'stats') skeletonEl = createAnalyticsSkeleton();
+      else if (tabName === 'attendance') skeletonEl = createAttendanceSkeleton();
+      else if (tabName === 'performance') skeletonEl = createPerformanceSkeleton();
+      else if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
+      else if (tabName === 'stats') skeletonEl = createAnalyticsSkeleton();
+      
       targetTabEl.appendChild(skeletonEl);
       targetTabEl.classList.remove('hidden');
     }
-    // FIX: guard against null event (hash/sidebar navigation)
-    if (event?.target) event.target.classList.add('active');
-    if (tabName === 'students') this.renderStudentsTab();
-    if (tabName === 'attendance') this.renderAttendanceTab();
-    if (tabName === 'performance') this.renderPerformanceTab();
-    if (tabName === 'graduation') this.renderGraduationTab();
-    if (tabName === 'stats') this.renderStatsTab();
+
+    if (tabName === 'overview') this.renderOverviewTab();
+    else if (tabName === 'students') this.renderStudentsTab();
+    else if (tabName === 'attendance') this.renderAttendanceTab();
+    else if (tabName === 'performance') this.renderPerformanceTab();
+    else if (tabName === 'graduation') this.renderGraduationTab();
+    else if (tabName === 'stats') this.renderStatsTab();
+  }
+
+  /* ---- OVERVIEW TAB ---- */
+  async renderOverviewTab() {
+    const container = document.getElementById("overviewTab");
+    if (!container) return;
+    clearElement(container);
+
+    const heading = document.createElement('h2');
+    heading.textContent = 'Dashboard';
+    container.appendChild(heading);
+
+    if (this.isLoading) {
+      container.appendChild(createTabSkeleton());
+      return;
+    }
+
+    if (!this.assignedClass) {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted';
+      empty.textContent = 'No class is assigned to this instructor yet.';
+      container.appendChild(empty);
+      return;
+    }
+
+    try {
+      // Fetch stats in parallel
+      const [attendanceStats, gradStats] = await Promise.all([
+        calculateAttendanceStats(this.assignedClass),
+        calculateGraduationStats(this.assignedClass)
+      ]);
+
+      // Calculate attendance rate
+      const studentStatsValues = Object.values(attendanceStats.studentStats || {});
+      const classAttendanceRate = studentStatsValues.length === 0
+        ? 0
+        : Math.round(studentStatsValues.reduce((sum, s) => sum + s.attendanceRate, 0) / studentStatsValues.length);
+
+      // Calculate graduation readiness count (threshold >= 70%)
+      const graduationReadyCount = Object.values(gradStats.studentGraduationStats || {}).filter(s => s.graduationRate >= 70).length;
+
+      // Render the metrics grid
+      const grid = document.createElement('div');
+      grid.className = 'stats-grid mb-xl';
+      grid.innerHTML = `
+        <div class="stat-card">
+          <div class="stat-label">Total Students</div>
+          <div class="stat-value" style="color: var(--primary-blue); font-size: 2.2rem; font-weight: 700; margin: 0.5rem 0;">${attendanceStats.totalStudents}</div>
+          <div class="stat-desc text-muted">Registered in your class</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Class Attendance Rate</div>
+          <div class="stat-value" style="color: var(--success-green); font-size: 2.2rem; font-weight: 700; margin: 0.5rem 0;">${classAttendanceRate}%</div>
+          <div class="stat-desc text-muted">Average across all sessions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Graduation Ready</div>
+          <div class="stat-value" style="color: var(--warning-orange); font-size: 2.2rem; font-weight: 700; margin: 0.5rem 0;">${graduationReadyCount}</div>
+          <div class="stat-desc text-muted">Students at or above 70% chance</div>
+        </div>
+      `;
+      container.appendChild(grid);
+
+      // Render Daily Inspiration Quote Card
+      const quoteCard = createMotivationCard('Daily Inspiration');
+      quoteCard.classList.add('mb-xl');
+      container.appendChild(quoteCard);
+
+      // Render Upcoming gathering place schedule
+      const scheduleSection = document.createElement('div');
+      scheduleSection.className = 'card';
+      
+      const scheduleHeader = document.createElement('div');
+      scheduleHeader.className = 'card-header';
+      scheduleHeader.textContent = 'Upcoming Gathering Place Schedule';
+      scheduleSection.appendChild(scheduleHeader);
+
+      const scheduleBody = document.createElement('div');
+      scheduleBody.className = 'card-body';
+
+      try {
+        const nextDates = getNextClassDates(30);
+        const scheduleList = document.createElement('div');
+        scheduleList.className = 'schedule-list';
+
+        nextDates.forEach(entry => {
+          const item = document.createElement('div');
+          item.className = 'schedule-item';
+          item.style.padding = 'var(--spacing-md) 0';
+          item.style.borderBottom = 'var(--border-width) solid var(--border-color)';
+          
+          const formattedDate = new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric'
+          });
+
+          // Highlight today/next class in Nigeria timezone
+          const todayKey = getNigeriaDateKey(new Date());
+          const isToday = entry.date === todayKey;
+
+          item.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong class="schedule-date" style="${isToday ? 'color: var(--primary-blue); font-weight: 600;' : ''}">${formattedDate} ${isToday ? '<span class="badge badge-success" style="margin-left: 6px;">Today</span>' : ''}</strong>
+                <div class="schedule-classes text-muted small" style="margin-top: 4px;">${entry.classes.join(', ') || 'No classes'}</div>
+              </div>
+              <span class="badge ${entry.type === 'Class' ? 'badge-primary' : 'badge-secondary'}">${entry.type}</span>
+            </div>
+          `;
+          scheduleList.appendChild(item);
+        });
+
+        if (nextDates.length === 0) {
+          scheduleBody.innerHTML = '<p class="text-muted">No upcoming classes scheduled.</p>';
+        } else {
+          // Remove the border-bottom from the last schedule item
+          if (scheduleList.lastChild) {
+            scheduleList.lastChild.style.borderBottom = 'none';
+          }
+          scheduleBody.appendChild(scheduleList);
+        }
+      } catch (err) {
+        console.error('Error loading overview schedule:', err);
+        scheduleBody.innerHTML = '<p class="text-danger">Unable to load schedule.</p>';
+      }
+
+      scheduleSection.appendChild(scheduleBody);
+      container.appendChild(scheduleSection);
+
+    } catch (error) {
+      console.error('Error loading overview data:', error);
+      const errEl = document.createElement('p');
+      errEl.className = 'text-danger';
+      errEl.textContent = 'Error calculating overview metrics. Please ensure Firebase connection is active.';
+      container.appendChild(errEl);
+    }
   }
 
   /* ---- STUDENTS TAB ---- */
@@ -455,6 +609,7 @@ export class InstructorDashboard {
   renderAttendanceTab() {
     this.refreshAttendanceLockState();
     const container = document.getElementById("attendanceTab");
+    if (!container) return;
     if (this.isLoading) {
       clearElement(container);
       container.innerHTML = '<h2>Attendance</h2>';
@@ -462,13 +617,16 @@ export class InstructorDashboard {
       return;
     }
     const isLocked = this.attendanceLockState?.isLocked;
-    // FIX Bug 10: formatDate correctly handles Firestore Timestamps via its toDate() guard
+    
     const sessionsHTML = this.sessions.map(session => `
       <tr>
         <td>${formatDate(session.date)}</td>
-        <td>${session.records.filter(r => r.status === "present").length} / ${session.records.length}</td>
+        <td>${session.records ? session.records.filter(r => r.status === "present").length : 0} / ${session.records ? session.records.length : 0}</td>
         <td>
-          <button class="btn btn-small btn-danger delete-session" data-id="${session.id}" ${isLocked ? 'disabled' : ''}>Delete</button>
+          <div class="flex gap-xs">
+            <button class="btn btn-small btn-secondary edit-session" data-id="${session.id}" ${isLocked ? 'disabled' : ''}>Edit</button>
+            <button class="btn btn-small btn-danger delete-session" data-id="${session.id}" ${isLocked ? 'disabled' : ''}>Delete</button>
+          </div>
         </td>
       </tr>
     `).join("");
@@ -479,16 +637,47 @@ export class InstructorDashboard {
       <button id="newSessionBtn" class="btn ${isLocked ? 'btn-secondary' : 'btn-primary'} mb-lg" ${isLocked ? 'disabled' : ''}>${isLocked ? 'Attendance Locked' : 'New Attendance Session'}</button>
       <table class="data-table">
         <thead><tr><th>Date</th><th>Attendance</th><th>Actions</th></tr></thead>
-        <tbody>${sessionsHTML}</tbody>
+        <tbody>${sessionsHTML || '<tr><td colspan="3" class="text-muted text-center">No attendance sessions recorded yet.</td></tr>'}</tbody>
       </table>
     `;
 
+    const getNigeriaDateKeyForSession = (sessionDate) => {
+      if (!sessionDate) return '';
+      const d = sessionDate.toDate ? sessionDate.toDate() : new Date(sessionDate);
+      return getNigeriaDateKey(d);
+    };
+
     if (!isLocked) {
-      document.getElementById("newSessionBtn")?.addEventListener("click", () => this.renderNewSessionForm());
+      document.getElementById("newSessionBtn")?.addEventListener("click", () => {
+        const todayKey = getNigeriaDateKey(new Date());
+        const existingSessionForToday = this.sessions.find(session => {
+          const sessionKey = getNigeriaDateKeyForSession(session.date);
+          return sessionKey === todayKey;
+        });
+
+        if (existingSessionForToday) {
+          showNotification('An attendance session for today already exists. Redirecting to edit mode.', 'warning');
+          this.renderSessionForm(existingSessionForToday);
+        } else {
+          this.renderSessionForm();
+        }
+      });
     }
 
     if (isLocked) return;
 
+    // Hook up Edit buttons
+    container.querySelectorAll(".edit-session").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const sessionId = e.currentTarget.dataset.id;
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (session) {
+          this.renderSessionForm(session);
+        }
+      });
+    });
+
+    // Hook up Delete buttons
     container.querySelectorAll(".delete-session").forEach(btn => {
       btn.addEventListener("click", (e) => {
         const sessionId = e.currentTarget.dataset.id;
@@ -510,8 +699,8 @@ export class InstructorDashboard {
     });
   }
 
-  /* ---- NEW SESSION FORM ---- */
-  renderNewSessionForm() {
+  /* ---- SESSION FORM (NEW/EDIT) ---- */
+  renderSessionForm(session = null) {
     this.refreshAttendanceLockState();
     if (this.attendanceLockState?.isLocked) {
       this.renderAttendanceTab();
@@ -520,27 +709,67 @@ export class InstructorDashboard {
     }
 
     const container = document.getElementById("attendanceTab");
-    const studentsHTML = this.students.map(s => `
-      <tr>
-        <td>${s.name}</td>
-        <td><select class="form-select" data-id="${s.id}"><option value="present">Present</option><option value="absent">Absent</option></select></td>
-      </tr>
-    `).join("");
+    if (!container) return;
+    const isEditMode = !!session;
+    const titleText = isEditMode ? 'Edit Attendance Session' : 'New Attendance Session';
+
+    const statusMap = {};
+    if (isEditMode && session.records) {
+      session.records.forEach(r => {
+        statusMap[r.studentId] = r.status;
+      });
+    }
+
+    const studentsHTML = this.students.map(s => {
+      const currentStatus = statusMap[s.id] || 'present';
+      return `
+        <tr>
+          <td><strong>${s.name}</strong></td>
+          <td>
+            <select class="form-select" data-id="${s.id}">
+              <option value="present" ${currentStatus === 'present' ? 'selected' : ''}>Present</option>
+              <option value="absent" ${currentStatus === 'absent' ? 'selected' : ''}>Absent</option>
+            </select>
+          </td>
+        </tr>
+      `;
+    }).join("");
 
     container.innerHTML = `
-      <h2>New Attendance Session</h2>
-      ${this.getAttendanceLockBannerMarkup()}
-      <table class="data-table">
-        <thead><tr><th>Student</th><th>Status</th></tr></thead>
-        <tbody>${studentsHTML}</tbody>
-      </table>
-      <div class="flex gap-md mt-lg">
-        <button id="saveAttendance" class="btn btn-primary">Save Attendance</button>
+      <div class="flex-between mb-lg align-center">
+        <h2>${titleText}</h2>
+        <span class="badge ${isEditMode ? 'badge-warning' : 'badge-success'}">${isEditMode ? 'Editing Mode' : 'New Session'}</span>
+      </div>
+      ${this.getAttendanceLockMarkup ? this.getAttendanceLockMarkup() : this.getAttendanceLockBannerMarkup()}
+      
+      <div class="card mt-lg">
+        <div class="card-header flex-between">
+          <span>Class Attendance List</span>
+          <span class="text-muted small">${isEditMode ? 'Session Date: ' + formatDate(session.date) : 'Today'}</span>
+        </div>
+        <div class="card-body" style="padding: 0;">
+          <table class="data-table mb-0">
+            <thead>
+              <tr>
+                <th>Student Name</th>
+                <th style="width: 150px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${studentsHTML || '<tr><td colspan="2" class="text-muted text-center">No students registered in this class yet.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="flex gap-md mt-xl">
+        <button id="saveAttendance" class="btn btn-primary">${isEditMode ? 'Update Attendance' : 'Save Attendance'}</button>
         <button id="cancelSession" class="btn btn-secondary">Cancel</button>
       </div>
     `;
 
     document.getElementById("cancelSession")?.addEventListener("click", () => this.renderAttendanceTab());
+    
     document.getElementById("saveAttendance")?.addEventListener("click", async () => {
       this.refreshAttendanceLockState();
       if (this.attendanceLockState?.isLocked) {
@@ -550,23 +779,42 @@ export class InstructorDashboard {
       }
 
       const btn = document.getElementById("saveAttendance");
+      if (!btn) return;
       btn.disabled = true;
+      btn.textContent = 'Saving...';
+      
       try {
         const records = [];
         container.querySelectorAll("select[data-id]").forEach(sel => {
           const student = this.students.find(s => s.id === sel.dataset.id);
           records.push({ studentId: sel.dataset.id, name: student?.name || '', status: sel.value });
         });
-        await createSession({
-          class: this.assignedClass,
-          date: getNigeriaDateKey(new Date()),
-          records,
-          createdBy: this.currentUser?.uid || 'local-instructor'
-        });
+
+        if (isEditMode) {
+          // Edit mode: save using updateAttendance for each record
+          for (const r of records) {
+            await updateAttendance(session.id, r.studentId, r.status);
+          }
+          showNotification('Attendance updated', 'success');
+        } else {
+          // New session mode: create session
+          await createSession({
+            class: this.assignedClass,
+            date: getNigeriaDateKey(new Date()),
+            records,
+            createdBy: this.currentUser?.uid || 'local-instructor'
+          });
+          showNotification('Attendance saved', 'success');
+        }
+
         await this.loadSessions();
         this.renderAttendanceTab();
-        showNotification('Attendance saved', 'success');
-      } catch (err) { console.error(err); showNotification('Failed to save attendance', 'error'); btn.disabled = false; }
+      } catch (err) {
+        console.error(err);
+        showNotification(isEditMode ? 'Failed to update attendance' : 'Failed to save attendance', 'error');
+        btn.disabled = false;
+        btn.textContent = isEditMode ? 'Update Attendance' : 'Save Attendance';
+      }
     });
   }
 
