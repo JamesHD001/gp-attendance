@@ -1,8 +1,8 @@
 // Firestore Security Rules for YSA GP Attendance System
 // Copy and paste these rules into Firebase Console > Firestore > Rules tab
 //
-// BUG FIX: `assignedClass` renamed to `assignedClassId` throughout to match
-// the canonical schema field and the deployed firestore.rules file.
+// Instructor assignment now prefers `assignedClassId` but still accepts the
+// legacy `assignedClass` field during migration.
 
 rules_version = '2';
 service cloud.firestore {
@@ -11,18 +11,32 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper function to get user's role (safe when user doc missing)
-    function getUserRole(userId) {
+    function getUserData(userId) {
       return exists(/databases/$(database)/documents/users/$(userId))
-        ? get(/databases/$(database)/documents/users/$(userId)).data.role
+        ? get(/databases/$(database)/documents/users/$(userId)).data
         : null;
     }
 
-    // BUG FIX: was `assignedClass` — now `assignedClassId` to match schema
-    function getUserAssignedClass(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId))
-        ? get(/databases/$(database)/documents/users/$(userId)).data.assignedClassId
+    // Helper function to get user's role (safe when user doc missing)
+    function getUserRole(userId) {
+      let userData = getUserData(userId);
+      return userData != null
+        ? userData.role
         : null;
+    }
+
+    // Prefer the canonical `assignedClassId`, but keep legacy `assignedClass`
+    // support so older instructor documents can still pass scoped writes.
+    function getUserAssignedClass(userId) {
+      let userData = getUserData(userId);
+      return userData == null
+        ? null
+        : (
+          userData.assignedClassId != null &&
+          userData.assignedClassId != ''
+            ? userData.assignedClassId
+            : userData.assignedClass
+        );
     }
 
     // Helper function to check if user is admin

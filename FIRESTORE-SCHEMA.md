@@ -84,5 +84,5 @@ This document describes the recommended Firestore collections, documents, and fi
 - Use Firestore server timestamps for all `createdAt` fields (i.e. `serverTimestamp()`) to ensure consistent types and ordering across clients and server scripts.
 - `attendanceSessions` documents do not embed attendance records in this schema; `attendanceRecords` is a separate collection keyed by `sessionId` so code should query `attendanceRecords` for session details.
 - `performanceRatings` stores the latest instructor feedback per student for a class and can be combined with attendance percentage to derive graduation readiness metrics in the UI.
-- Standardize on `assignedClassId` for instructor assignment. If you have existing user documents with `assignedClass`, run a one-time migration script to copy `assignedClass` -> `assignedClassId` and confirm tests before removing the legacy field.
-- Update any docs, UI labels, and security rules to reference `assignedClassId` to avoid runtime mismatches.
+- Standardize on `assignedClassId` for instructor assignment. The security rules now fall back to legacy `assignedClass` so older instructor accounts can keep working during migration, but new writes should continue using `assignedClassId`.
+- Update any docs and UI labels to reference `assignedClassId`, and remove the legacy rules fallback only after older user documents have been migrated.

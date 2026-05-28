@@ -64,6 +64,14 @@ async function run() {
         assignedClassId: 'class1',
         createdAt: Timestamp.now()
       });
+
+      await setDoc(doc(adminDb, 'users', 'legacyInstructor'), {
+        name: 'Legacy Instructor',
+        email: 'legacy@example.test',
+        role: 'instructor',
+        assignedClass: 'class1',
+        createdAt: Timestamp.now()
+      });
     });
 
     const adminContext = testEnv.authenticatedContext('adminUid');
@@ -203,6 +211,51 @@ async function run() {
       }
     } catch (e) {
       console.error('ERROR: instructor create attendance record failed', e);
+      throw e;
+    }
+
+    const legacyInstructorContext = testEnv.authenticatedContext('legacyInstructor');
+    const legacyInstructorDb = legacyInstructorContext.firestore();
+    const legacySessionData = {
+      classId: 'class1',
+      date: Timestamp.now(),
+      createdBy: 'legacyInstructor',
+      createdAt: Timestamp.now()
+    };
+
+    console.log('Attempt: legacy instructor create session using assignedClass fallback');
+    try {
+      if (instructorAttendanceLocked) {
+        await assertFails(addDoc(collection(legacyInstructorDb, 'attendanceSessions'), legacySessionData));
+        console.log('OK: legacy instructor session creation still respects attendance lock');
+      } else {
+        await assertSucceeds(addDoc(collection(legacyInstructorDb, 'attendanceSessions'), legacySessionData));
+        console.log('OK: legacy instructor create session through assignedClass fallback');
+      }
+    } catch (e) {
+      console.error('ERROR: legacy instructor create session failed', e);
+      throw e;
+    }
+
+    console.log('Creating a legacy instructor session in security-disabled mode for attendanceRecords tests');
+    let legacySessionRef;
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const docRef = await addDoc(collection(db, 'attendanceSessions'), legacySessionData);
+      legacySessionRef = docRef;
+    });
+
+    console.log('Attempt: legacy instructor create attendance record using assignedClass fallback');
+    try {
+      if (instructorAttendanceLocked) {
+        await assertFails(addDoc(collection(legacyInstructorDb, 'attendanceRecords'), { sessionId: legacySessionRef.id, studentId: 'legacy-s1', status: 'present', createdAt: Timestamp.now() }));
+        console.log('OK: legacy instructor attendance record creation blocked after 4:00 PM Nigeria time');
+      } else {
+        await assertSucceeds(addDoc(collection(legacyInstructorDb, 'attendanceRecords'), { sessionId: legacySessionRef.id, studentId: 'legacy-s1', status: 'present', createdAt: Timestamp.now() }));
+        console.log('OK: legacy instructor create attendance record through assignedClass fallback');
+      }
+    } catch (e) {
+      console.error('ERROR: legacy instructor create attendance record failed', e);
       throw e;
     }
 
