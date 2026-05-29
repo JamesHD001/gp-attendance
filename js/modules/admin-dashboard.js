@@ -37,6 +37,8 @@ export class AdminDashboard {
     this.currentUserProfile = null;
     this.eventListenersInitialized = false;
     this.dropdownHandlerInitialized = false;
+    this.isDashboardMenuOpen = true;
+    this.isSidebarCollapsed = false;
     this._fetchingUserIds = new Set();
     this.manageSelectedClassId = '';
     this.manageTargetClassId = '';
@@ -105,7 +107,6 @@ export class AdminDashboard {
   }
 
   attachFreshEventListeners() {
-    this.eventListenersInitialized = false;
     this.setupEventListeners();
   }
 
@@ -113,7 +114,7 @@ export class AdminDashboard {
     if (this.dropdownHandlerInitialized) return;
     this.dropdownHandlerInitialized = true;
 
-    const handleClickOutside = (event) => {
+    const handleOutsideInteraction = (event) => {
       const dashboardItem = document.querySelector('.nav-item-dashboard');
       if (!dashboardItem) return;
 
@@ -123,7 +124,28 @@ export class AdminDashboard {
       }
     };
 
-    document.addEventListener('click', handleClickOutside, true);
+    const handleFocusOutside = (event) => {
+      const dashboardItem = document.querySelector('.nav-item-dashboard');
+      if (!dashboardItem) return;
+
+      if (!dashboardItem.contains(event.target)) {
+        this.setDashboardMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+
+      const dashboardItem = document.querySelector('.nav-item-dashboard');
+      if (!dashboardItem || !dashboardItem.contains(document.activeElement)) return;
+
+      this.setDashboardMenuOpen(false);
+      document.getElementById('dashboardNavToggle')?.focus();
+    };
+
+    document.addEventListener('click', handleOutsideInteraction, true);
+    document.addEventListener('focusin', handleFocusOutside);
+    document.addEventListener('keydown', handleEscape);
   }
 
   async loadClasses() {
@@ -193,15 +215,46 @@ export class AdminDashboard {
   setDashboardMenuOpen(isOpen) {
     const dashboardToggle = document.getElementById('dashboardNavToggle');
     const dashboardSubmenu = document.getElementById('dashboardSubmenu');
+    this.isDashboardMenuOpen = Boolean(isOpen);
 
     if (dashboardSubmenu) {
-      dashboardSubmenu.classList.toggle('hidden', !isOpen);
+      dashboardSubmenu.classList.toggle('hidden', !this.isDashboardMenuOpen);
     }
 
     if (dashboardToggle) {
-      dashboardToggle.setAttribute('aria-expanded', String(isOpen));
-      dashboardToggle.classList.toggle('is-expanded', isOpen);
+      dashboardToggle.setAttribute('aria-expanded', String(this.isDashboardMenuOpen));
+      dashboardToggle.classList.toggle('is-expanded', this.isDashboardMenuOpen);
     }
+  }
+
+  setSidebarCollapsed(isCollapsed) {
+    const shell = document.querySelector('.dashboard-shell');
+    const toggle = document.getElementById('sidebarCollapseBtn');
+    const icon = toggle?.querySelector('[data-lucide]');
+    this.isSidebarCollapsed = Boolean(isCollapsed);
+
+    if (shell) {
+      shell.classList.toggle('sidebar-collapsed', this.isSidebarCollapsed);
+    }
+
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', String(!this.isSidebarCollapsed));
+      toggle.setAttribute('aria-label', this.isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      toggle.title = this.isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    }
+
+    if (icon) {
+      icon.setAttribute('data-lucide', this.isSidebarCollapsed ? 'panel-left-open' : 'panel-left-close');
+      window.lucide?.createIcons();
+    }
+
+    if (this.isSidebarCollapsed) {
+      this.setDashboardMenuOpen(false);
+    }
+
+    try {
+      localStorage.setItem('adminSidebarCollapsed', this.isSidebarCollapsed ? 'true' : 'false');
+    } catch (_) {}
   }
 
   syncSidebarNavigation(activeTab = this.currentTab) {
@@ -222,7 +275,9 @@ export class AdminDashboard {
       dashboardToggle.classList.toggle('active', dashboardTabActive);
     }
 
-    this.setDashboardMenuOpen(dashboardTabActive);
+    if (dashboardTabActive && !this.isSidebarCollapsed) {
+      this.setDashboardMenuOpen(true);
+    }
   }
 
   getClassRecordById(classId) {
@@ -354,11 +409,19 @@ export class AdminDashboard {
       await AuthService.logout();
     });
 
+    document.getElementById('sidebarCollapseBtn')?.addEventListener('click', () => {
+      this.setSidebarCollapsed(!this.isSidebarCollapsed);
+    });
+
     document.getElementById('dashboardNavToggle')?.addEventListener('click', (event) => {
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       const dashboardSubmenu = document.getElementById('dashboardSubmenu');
       const isOpen = dashboardSubmenu ? !dashboardSubmenu.classList.contains('hidden') : false;
+
+      if (this.isSidebarCollapsed) {
+        this.setSidebarCollapsed(false);
+      }
 
       this.setDashboardMenuOpen(!isOpen);
     });
@@ -368,6 +431,7 @@ export class AdminDashboard {
         event.preventDefault();
         const tabName = link.dataset.tab;
         if (!tabName) return;
+        this.setDashboardMenuOpen(true);
         this.switchTab(tabName, null);
         try { history.replaceState(null, '', link.getAttribute('href') || `#${tabName}`); } catch (_) {}
       });
@@ -378,6 +442,7 @@ export class AdminDashboard {
         event.preventDefault();
         const tabName = link.dataset.tab;
         if (!tabName) return;
+        this.setDashboardMenuOpen(false);
         this.switchTab(tabName, null);
         try { history.replaceState(null, '', link.getAttribute('href') || `#${tabName}`); } catch (_) {}
       });
@@ -386,8 +451,17 @@ export class AdminDashboard {
     window.addEventListener('hashchange', () => {
       const tabName = this.getTabFromHash(location.hash);
       if (!tabName) return;
+      if (!this.isDashboardTab(tabName)) {
+        this.setDashboardMenuOpen(false);
+      }
       this.switchTab(tabName, null);
     });
+
+    try {
+      this.setSidebarCollapsed(localStorage.getItem('adminSidebarCollapsed') === 'true');
+    } catch (_) {
+      this.setSidebarCollapsed(false);
+    }
 
     const initialTab = this.getTabFromHash(location.hash) || 'overview';
     this.switchTab(initialTab, null, { force: true });

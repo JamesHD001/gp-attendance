@@ -29,27 +29,30 @@
                     <div class="brand-title">YSA GP</div>
                     <div class="brand-subtitle">Admin Console</div>
                 </div>
+                <button class="sidebar-collapse-toggle" id="sidebarCollapseBtn" type="button" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+                    <span data-lucide="panel-left-close"></span>
+                </button>
                 <button class="mobile-sidebar-close" id="mobileSidebarClose" aria-label="Close navigation menu">×</button>
             </div>
 
             <div class="sidebar-section-label">Workspace</div>
             <ul class="nav">
                 <li class="nav-item nav-item-dashboard">
-                    <a id="dashboardNavToggle" href="#overview" class="nav-link nav-link-toggle active" aria-expanded="true" aria-controls="dashboardSubmenu">
-                        <span data-lucide="layout-dashboard"></span>
-                        <span>Dashboard</span>
+                    <a id="dashboardNavToggle" href="#dashboardSubmenu" role="button" class="nav-link nav-link-toggle active" aria-expanded="true" aria-controls="dashboardSubmenu">
+                        <span class="nav-icon" data-lucide="layout-dashboard"></span>
+                        <span class="nav-label">Dashboard</span>
                         <span class="nav-caret">v</span>
                     </a>
                     <ul id="dashboardSubmenu" class="nav-submenu">
-                        <li class="nav-subitem"><a href="#overview" class="nav-sublink active" data-tab="overview"><span data-lucide="home" style="width: 16px; height: 16px; display: inline-block;"></span> Overview</a></li>
-                        <li class="nav-subitem"><a href="#classes" class="nav-sublink" data-tab="classes"><span data-lucide="book-open" style="width: 16px; height: 16px; display: inline-block;"></span> Classes</a></li>
-                        <li class="nav-subitem"><a href="#graduation" class="nav-sublink" data-tab="graduation"><span data-lucide="graduation-cap" style="width: 16px; height: 16px; display: inline-block;"></span> Graduation</a></li>
-                        <li class="nav-subitem"><a href="#students" class="nav-sublink" data-tab="students"><span data-lucide="users" style="width: 16px; height: 16px; display: inline-block;"></span> Students</a></li>
+                        <li class="nav-subitem"><a href="#overview" class="nav-sublink active" data-tab="overview"><span class="nav-icon" data-lucide="home"></span><span class="nav-label">Overview</span></a></li>
+                        <li class="nav-subitem"><a href="#classes" class="nav-sublink" data-tab="classes"><span class="nav-icon" data-lucide="book-open"></span><span class="nav-label">Classes</span></a></li>
+                        <li class="nav-subitem"><a href="#graduation" class="nav-sublink" data-tab="graduation"><span class="nav-icon" data-lucide="graduation-cap"></span><span class="nav-label">Graduation</span></a></li>
+                        <li class="nav-subitem"><a href="#students" class="nav-sublink" data-tab="students"><span class="nav-icon" data-lucide="users"></span><span class="nav-label">Students</span></a></li>
                     </ul>
                 </li>
-                <li class="nav-item"><a href="#analytics" class="nav-link" data-tab="analytics"><span data-lucide="bar-chart-3" style="width: 16px; height: 16px; display: inline-block;"></span> Analytics</a></li>
-                <li class="nav-item"><a href="#users" class="nav-link" data-tab="users"><span data-lucide="users-round" style="width: 16px; height: 16px; display: inline-block;"></span> Users</a></li>
-                <li class="nav-item"><a href="#settings" class="nav-link" data-tab="settings"><span data-lucide="settings" style="width: 16px; height: 16px; display: inline-block;"></span> Settings</a></li>
+                <li class="nav-item"><a href="#analytics" class="nav-link" data-tab="analytics"><span class="nav-icon" data-lucide="bar-chart-3"></span><span class="nav-label">Analytics</span></a></li>
+                <li class="nav-item"><a href="#users" class="nav-link" data-tab="users"><span class="nav-icon" data-lucide="users-round"></span><span class="nav-label">Users</span></a></li>
+                <li class="nav-item"><a href="#settings" class="nav-link" data-tab="settings"><span class="nav-icon" data-lucide="settings"></span><span class="nav-label">Settings</span></a></li>
             </ul>
 
             <div class="sidebar-bottom">
@@ -57,7 +60,7 @@
                     <span class="meta-label">IJEBU-ODE STAKE</span>
                     <span class="meta-value">Attendance System</span>
                 </div>
-                <button id="logoutBtn" class="sidebar-nav-action" type="button"><span data-lucide="log-out" style="width: 16px; height: 16px; display: inline-block; margin-right: 8px;"></span>Logout</button>
+                <button id="logoutBtn" class="sidebar-nav-action" type="button"><span class="nav-icon" data-lucide="log-out"></span><span class="nav-label">Logout</span></button>
             </div>
         </nav>
 
