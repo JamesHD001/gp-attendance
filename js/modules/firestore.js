@@ -14,7 +14,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   writeBatch,
   serverTimestamp,
   Timestamp
@@ -58,6 +57,20 @@ function normalizeSharedClassIds(value) {
       .map(item => String(item || '').trim())
       .filter(Boolean)
   )];
+}
+
+function getDateMillis(value) {
+  if (!value) return 0;
+
+  const dateValue = value.toDate ? value.toDate() : value;
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  const millis = date.getTime();
+
+  return Number.isFinite(millis) ? millis : 0;
+}
+
+function sortSessionsByDateDesc(left, right) {
+  return getDateMillis(right?.date) - getDateMillis(left?.date);
 }
 
 function buildNormalizedClassRecord(id, data = {}) {
@@ -527,21 +540,23 @@ export async function createAttendanceSession(classId, date, createdBy, summary 
 }
 
 export async function getSessionsByClass(classId) {
+  if (!classId) return [];
 
   const sessionsRef = collection(db, "attendanceSessions");
 
   const q = query(
     sessionsRef,
-    where("classId", "==", classId),
-    orderBy("date", "desc")
+    where("classId", "==", classId)
   );
 
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map(doc => {
-    const d = doc.data() || {};
-    return Object.assign({}, d, { id: doc.id });
-  });
+  return snapshot.docs
+    .map(doc => {
+      const d = doc.data() || {};
+      return Object.assign({}, d, { id: doc.id });
+    })
+    .sort(sortSessionsByDateDesc);
 
 }
 
@@ -561,8 +576,23 @@ export async function getSessionById(sessionId) {
 }
 
 export async function deleteAttendanceSession(sessionId) {
+  if (!sessionId) {
+    throw new Error('deleteAttendanceSession: sessionId is required');
+  }
 
   await assertInstructorAttendanceWindowOpenForCurrentUser();
+
+  const recordsRef = collection(db, "attendanceRecords");
+  const recordsQuery = query(recordsRef, where("sessionId", "==", sessionId));
+  const recordsSnapshot = await getDocs(recordsQuery);
+
+  for (let i = 0; i < recordsSnapshot.docs.length; i += 450) {
+    const batch = writeBatch(db);
+    recordsSnapshot.docs.slice(i, i + 450).forEach(recordDoc => {
+      batch.delete(recordDoc.ref);
+    });
+    await batch.commit();
+  }
 
   const sessionRef = doc(db, "attendanceSessions", sessionId);
 
@@ -1016,13 +1046,13 @@ export async function getAttendanceByTimePeriod(classId, period = 'weekly') {
 
   if (period === 'weekly') {
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    filteredSessions = sessions.filter(s => s.date.toDate() >= oneWeekAgo);
+    filteredSessions = sessions.filter(s => getDateMillis(s.date) >= oneWeekAgo.getTime());
   } else if (period === 'monthly') {
     const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    filteredSessions = sessions.filter(s => s.date.toDate() >= oneMonthAgo);
+    filteredSessions = sessions.filter(s => getDateMillis(s.date) >= oneMonthAgo.getTime());
   } else if (period === 'annually') {
     const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-    filteredSessions = sessions.filter(s => s.date.toDate() >= oneYearAgo);
+    filteredSessions = sessions.filter(s => getDateMillis(s.date) >= oneYearAgo.getTime());
   }
 
   const studentStats = {};
@@ -1114,9 +1144,11 @@ export async function getGatheringPlaceStats() {
 
 export async function getGeneralSessions() {
   const sessionsRef = collection(db, 'attendanceSessions');
-  const q = query(sessionsRef, where('isGeneral', '==', true), orderBy('date', 'desc'));
+  const q = query(sessionsRef, where('isGeneral', '==', true));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return snapshot.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }))
+    .sort(sortSessionsByDateDesc);
 }
 
 // Get next scheduled class dates based on gathering place schedule
