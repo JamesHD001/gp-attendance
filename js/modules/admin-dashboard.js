@@ -36,6 +36,7 @@ export class AdminDashboard {
     this.currentTab = 'overview';
     this.currentUserProfile = null;
     this.eventListenersInitialized = false;
+    this.dropdownHandlerInitialized = false;
     this._fetchingUserIds = new Set();
     this.manageSelectedClassId = '';
     this.manageTargetClassId = '';
@@ -54,6 +55,7 @@ export class AdminDashboard {
       this.currentUser = AuthService.getCurrentUser();
       this.renderDashboard();
       this.attachFreshEventListeners();
+      this.initializeDropdownHandler();
       try {
         await this.loadCurrentUserProfile();
         await this.loadClasses();
@@ -85,6 +87,7 @@ export class AdminDashboard {
         this.isLoading = true;
         this.renderDashboard();
         this.attachFreshEventListeners();
+        this.initializeDropdownHandler();
         await initializeClasses();
         await this.loadCurrentUserProfile();
         await this.loadClasses();
@@ -104,6 +107,23 @@ export class AdminDashboard {
   attachFreshEventListeners() {
     this.eventListenersInitialized = false;
     this.setupEventListeners();
+  }
+
+  initializeDropdownHandler() {
+    if (this.dropdownHandlerInitialized) return;
+    this.dropdownHandlerInitialized = true;
+
+    const handleClickOutside = (event) => {
+      const dashboardItem = document.querySelector('.nav-item-dashboard');
+      if (!dashboardItem) return;
+
+      const isClickInside = dashboardItem.contains(event.target);
+      if (!isClickInside) {
+        this.setDashboardMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside, true);
   }
 
   async loadClasses() {
@@ -336,14 +356,9 @@ export class AdminDashboard {
 
     document.getElementById('dashboardNavToggle')?.addEventListener('click', (event) => {
       event.preventDefault();
+      event.stopPropagation();
       const dashboardSubmenu = document.getElementById('dashboardSubmenu');
       const isOpen = dashboardSubmenu ? !dashboardSubmenu.classList.contains('hidden') : false;
-
-      if (!this.isDashboardTab(this.currentTab)) {
-        this.switchTab('overview', null);
-        try { history.replaceState(null, '', '#overview'); } catch (_) {}
-        return;
-      }
 
       this.setDashboardMenuOpen(!isOpen);
     });
