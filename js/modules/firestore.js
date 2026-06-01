@@ -510,6 +510,12 @@ export async function deleteStudent(studentId) {
 
 }
 
+export async function deleteClass(classId) {
+  if (!classId) throw new Error('deleteClass: missing classId');
+  const classRef = doc(db, "classes", classId);
+  await deleteDoc(classRef);
+}
+
 /* ===========================
    ATTENDANCE SESSIONS
 =========================== */
@@ -1154,10 +1160,8 @@ export async function getGeneralSessions() {
 // Get next scheduled class dates based on gathering place schedule
 export function getNextClassDates(daysAhead = 30) {
   const schedule = {
-    'Monday': { type: 'Family Home Evening', classes: [] },
-    'Wednesday': { type: 'Skill Acquisition', classes: ['ICT', 'Barbing', 'Catering', 'Fashion/Tailoring', 'Makeup/Facial Stylists', 'Hair Making/Dressing', 'Bag Making', 'Shoe Making'] },
-    'Thursday': { type: 'Self-Reliance & Spiritual', classes: ['Self-Reliance', 'BYU Pathway', 'Institute of Religion', 'Temple & Family History', 'Temple Prep', 'Mission Preparation'] },
-    'Friday': { type: 'Skill Acquisition', classes: ['ICT', 'Barbing', 'Catering', 'Fashion/Tailoring', 'Makeup/Facial Stylists', 'Hair Making/Dressing', 'Bag Making', 'Shoe Making'] }
+    'Wednesday': { type: 'Gathering Place Classes', classes: ['All Skill Classes', 'Institute of Religion', 'Family History & Temple Preparation', 'Other General Classes'] },
+    'Friday': { type: 'Gathering Place Classes', classes: ['All Skill Classes', 'Institute of Religion', 'Family History & Temple Preparation', 'Other General Classes'] }
   };
 
   const nextDates = [];

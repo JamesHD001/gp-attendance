@@ -7,7 +7,7 @@ import {
   deleteStudent, getUserData, createSession, getGatheringPlaceStats,
   getSessionsByClass, getAttendanceBySession, deleteAttendanceSession, getGeneralSessions, updateStudent,
   ensureGeneralClasses, bulkAssignStudentsToClass, bulkRemoveStudentsFromClass, updateUser,
-  studentHasClass, getStudentMembershipType
+  studentHasClass, getStudentMembershipType, deleteClass
 } from './firestore.js';
 import { AuthService } from './auth.js';
 import { auth, db, firebaseConfig } from '../firebase-config.js';
@@ -886,7 +886,27 @@ export class AdminDashboard {
             catch { showNotification('Failed to update class', 'error'); }
           });
 
-          wrap.append(viewBtn, lockBtn);
+          const deleteBtn = createButton('Delete', async () => {
+            const content = document.createElement('div');
+            content.innerHTML = `<p>Delete <strong>${cls.name}</strong>? This will remove the class and all associated data.</p>`;
+            const confirmBtn = createButton('Delete', async () => {
+              try {
+                await deleteClass(cls.id);
+                await this.loadClasses();
+                this.renderClassesTab();
+                showNotification('Class deleted successfully', 'success');
+              } catch (err) {
+                console.error('Failed to delete class:', err);
+                showNotification('Failed to delete class', 'error');
+              }
+              modal.remove();
+            }, { className: 'btn-danger' });
+            const cancelBtn = createButton('Cancel', () => modal.remove());
+            const modal = createModal('Confirm delete class', content, [confirmBtn, cancelBtn]);
+            document.body.appendChild(modal);
+          }, { className: 'btn-danger btn-small' });
+
+          wrap.append(viewBtn, lockBtn, deleteBtn);
           return wrap;
         }
       };
