@@ -35,6 +35,7 @@ export class InstructorDashboard {
     this.isLoading = true;
     this.currentTab = 'overview';
     this.eventListenersInitialized = false;
+    this.mobileNavInitialized = false;
     this.attendanceLockState = getInstructorAttendanceLockState();
     this.attendanceLockTickTimeout = null;
     this.attendanceLockTickInterval = null;
@@ -210,13 +211,6 @@ export class InstructorDashboard {
     const mainContent = document.querySelector('.main-content');
     if (!mainContent) return;
     mainContent.innerHTML = `
-      <div class="flex-between mb-xl">
-        <div>
-          <h1>Instructor Dashboard</h1>
-          <p class="text-muted">${this.userData.name || 'Instructor'} — ${this.assignedClassName} Class</p>
-        </div>
-        <button id="logoutBtn" class="btn btn-secondary">Logout</button>
-      </div>
       <div id="overviewTab" class="tab-content"></div>
       <div id="studentsTab" class="tab-content hidden"></div>
       <div id="attendanceTab" class="tab-content hidden"></div>
@@ -231,43 +225,51 @@ export class InstructorDashboard {
     if (this.eventListenersInitialized) return;
     this.eventListenersInitialized = true;
 
-    // Listen to click on sidebar links or any tab-btn elements
-    const navLinks = document.querySelectorAll('.sidebar .nav-link, .tab-btn');
-    const handled = new Set();
-    
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+      await AuthService.logout();
+    });
+
+    const navLinks = document.querySelectorAll('.nav-link');
     navLinks.forEach(link => {
-      if (handled.has(link)) return;
-      handled.add(link);
-      
       link.addEventListener('click', (e) => {
         e.preventDefault();
-        const tabName = link.dataset.tab || link.getAttribute('data-tab');
-        if (tabName) {
-          this.switchTab(tabName);
-        } else {
-          // Fallback map hash for href attribute if data-tab is missing
-          const href = link.getAttribute('href') || '';
-          const hash = href.replace('#', '');
-          const mapped = { overview: 'overview', students: 'students', attendance: 'attendance', performance: 'performance', graduation: 'graduation', analytics: 'stats' }[hash] || hash;
-          if (mapped) {
-            this.switchTab(mapped);
-          }
-        }
+        const tabName = link.dataset.tab;
+        if (!tabName) return;
+        this.switchTab(tabName);
+        try { history.replaceState(null, '', link.getAttribute('href') || `#${tabName}`); } catch (_) {}
       });
     });
 
-    document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-      await AuthService.logout();
+    window.addEventListener('hashchange', () => {
+      const hash = location.hash.replace('#', '');
+      const map = { overview: 'overview', students: 'students', attendance: 'attendance', performance: 'performance', graduation: 'graduation', analytics: 'stats' };
+      const tabName = map[hash] || hash;
+      if (tabName) this.switchTab(tabName);
     });
+
+    const initialTab = this.getTabFromHash(location.hash);
+    if (initialTab) this.switchTab(initialTab);
+  }
+
+  getTabFromHash(hashValue = '') {
+    const key = (hashValue || '').replace('#', '');
+    const map = {
+      overview: 'overview',
+      students: 'students',
+      attendance: 'attendance',
+      performance: 'performance',
+      graduation: 'graduation',
+      analytics: 'stats'
+    };
+    return map[key] || '';
   }
 
   switchTab(tabName) {
     if (this.currentTab === tabName) return;
     this.currentTab = tabName;
 
-    // Synchronize active states on ALL sidebar links and tab buttons
-    document.querySelectorAll('.sidebar .nav-link, .tab-btn').forEach(b => {
-      if (b.dataset.tab === tabName || b.getAttribute('data-tab') === tabName) {
+    document.querySelectorAll('.nav-link').forEach(b => {
+      if (b.dataset.tab === tabName) {
         b.classList.add('active');
       } else {
         b.classList.remove('active');
@@ -275,7 +277,7 @@ export class InstructorDashboard {
     });
 
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-    
+
     const targetTabEl = document.getElementById(`${tabName}Tab`);
     if (targetTabEl) {
       clearElement(targetTabEl);
@@ -285,7 +287,7 @@ export class InstructorDashboard {
       else if (tabName === 'performance') skeletonEl = createPerformanceSkeleton();
       else if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
       else if (tabName === 'stats') skeletonEl = createAnalyticsSkeleton();
-      
+
       targetTabEl.appendChild(skeletonEl);
       targetTabEl.classList.remove('hidden');
     }

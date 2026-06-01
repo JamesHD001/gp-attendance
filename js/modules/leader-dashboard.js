@@ -41,6 +41,7 @@ export class LeaderDashboard {
     this.isLoading = true;
     this.currentTab = 'overview';
     this.eventListenersInitialized = false;
+    this.mobileNavInitialized = false;
   }
 
   async init() {
@@ -118,82 +119,71 @@ export class LeaderDashboard {
     if (this.eventListenersInitialized) return;
     this.eventListenersInitialized = true;
 
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', async () => {
-        await AuthService.logout();
-      });
-    }
-
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => this.switchTab(e.currentTarget.dataset.tab, e));
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+      await AuthService.logout();
     });
 
     const navLinks = document.querySelectorAll('.nav-link');
-    const mapHashToTab = (hash) => {
-      if (!hash) return '';
-      const map = { overview: 'overview', classes: 'classes', reports: 'reports', analytics: 'analytics', graduation: 'graduation', graduands: 'graduands' };
-      return map[hash.replace('#', '')] || hash.replace('#', '');
-    };
-
     navLinks.forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
-        const tabName = mapHashToTab(link.getAttribute('href') || '');
+        const tabName = link.dataset.tab;
         if (!tabName) return;
-        navLinks.forEach(n => n.classList.remove('active'));
-        link.classList.add('active');
-        const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
-        if (btn) btn.click();
-        else this.switchTab(tabName, null);
-        try { history.replaceState(null, '', link.getAttribute('href') || ''); } catch (_) {}
+        this.switchTab(tabName, null);
+        try { history.replaceState(null, '', link.getAttribute('href') || `#${tabName}`); } catch (_) {}
       });
     });
 
     window.addEventListener('hashchange', () => {
-      const tabName = mapHashToTab(location.hash);
-      if (!tabName) return;
-      const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
-      if (btn) btn.click();
-      else this.switchTab(tabName, null);
+      const hash = location.hash.replace('#', '');
+      const map = { overview: 'overview', classes: 'classes', reports: 'reports', analytics: 'analytics', graduation: 'graduation', graduands: 'graduands' };
+      const tabName = map[hash] || hash;
+      if (tabName) this.switchTab(tabName, null);
     });
 
-    if (location.hash) {
-      const initialTab = mapHashToTab(location.hash);
-      if (initialTab) {
-        const btn = document.querySelector(`.tab-btn[data-tab="${initialTab}"]`);
-        if (btn) btn.click();
-        else this.switchTab(initialTab, null);
-      }
-    }
+    const initialTab = this.getTabFromHash(location.hash);
+    if (initialTab) this.switchTab(initialTab, null);
+  }
+
+  getTabFromHash(hashValue = '') {
+    const key = (hashValue || '').replace('#', '');
+    const map = {
+      overview: 'overview',
+      classes: 'classes',
+      reports: 'reports',
+      analytics: 'analytics',
+      graduation: 'graduation',
+      graduands: 'graduands'
+    };
+    return map[key] || '';
   }
 
   switchTab(tabName, event) {
     if (this.currentTab === tabName) return;
     this.currentTab = tabName;
 
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-
-    const selectedTab = document.getElementById(`${tabName}Tab`);
-    if (selectedTab) selectedTab.classList.remove('hidden');
-
-      const targetTabEl = document.getElementById(`${tabName}Tab`);
-      if (targetTabEl) {
-        clearElement(targetTabEl);
-        let skeletonEl = createTabSkeleton();
-        if (tabName === 'classes') skeletonEl = createClassesSkeleton();
-        if (tabName === 'reports') skeletonEl = createReportsSkeleton();
-        if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
-        if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
-        if (tabName === 'graduands') skeletonEl = createGraduandsSkeleton();
-        targetTabEl.appendChild(skeletonEl);
-        targetTabEl.classList.remove('hidden');
+    document.querySelectorAll('.nav-link').forEach(b => {
+      if (b.dataset.tab === tabName) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
       }
+    });
 
-    // BUG FIX: event is null when navigating via sidebar links or hash changes.
-    // Guard before accessing event.target to prevent an uncaught TypeError.
-    if (event && event.target) event.target.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+
+    const targetTabEl = document.getElementById(`${tabName}Tab`);
+    if (targetTabEl) {
+      clearElement(targetTabEl);
+      let skeletonEl = createTabSkeleton();
+      if (tabName === 'classes') skeletonEl = createClassesSkeleton();
+      if (tabName === 'reports') skeletonEl = createReportsSkeleton();
+      if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
+      if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
+      if (tabName === 'graduands') skeletonEl = createGraduandsSkeleton();
+      targetTabEl.appendChild(skeletonEl);
+      targetTabEl.classList.remove('hidden');
+    }
 
     if (tabName === 'classes') this.renderClassesTab();
     if (tabName === 'reports')   this.renderReportsTab();
@@ -347,37 +337,14 @@ export class LeaderDashboard {
 
     clearElement(mainContent);
 
-    const header = document.createElement('div');
-    header.className = 'flex-between mb-xl';
-    header.innerHTML = `
-      <div>
-        <h1>Leader Dashboard</h1>
-        <p class="text-muted">Read-only attendance reports</p>
-      </div>
-      <button id="logoutBtn" class="btn btn-secondary">Logout</button>
-    `;
-    mainContent.appendChild(header);
-
-    const tabNav = document.createElement('div');
-    tabNav.className = 'tab-navigation mb-lg';
-    tabNav.innerHTML = `
-      <button class="tab-btn active" data-tab="overview">Overview</button>
-      <button class="tab-btn" data-tab="classes">Classes</button>
-      <button class="tab-btn" data-tab="reports">Reports</button>
-      <button class="tab-btn" data-tab="analytics">Analytics</button>
-      <button class="tab-btn" data-tab="graduation">Graduation</button>
-      <button class="tab-btn" data-tab="graduands">Graduands</button>
-    `;
-    mainContent.appendChild(tabNav);
-
     const tabContent = document.createElement('div');
     tabContent.innerHTML = `
-      <div id="overviewTab"   class="tab-content"></div>
-      <div id="classesTab"    class="tab-content hidden"></div>
-      <div id="reportsTab"    class="tab-content hidden"></div>
-      <div id="analyticsTab"  class="tab-content hidden"></div>
+      <div id="overviewTab" class="tab-content"></div>
+      <div id="classesTab" class="tab-content hidden"></div>
+      <div id="reportsTab" class="tab-content hidden"></div>
+      <div id="analyticsTab" class="tab-content hidden"></div>
       <div id="graduationTab" class="tab-content hidden"></div>
-      <div id="graduandsTab"  class="tab-content hidden"></div>
+      <div id="graduandsTab" class="tab-content hidden"></div>
     `;
     mainContent.appendChild(tabContent);
 

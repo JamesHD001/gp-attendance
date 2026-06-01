@@ -5,56 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Instructor Dashboard - YSA GP Attendance System</title>
     <link rel="stylesheet" href="../css/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-<body>
-    <header>
-        <div class="logo">
-            <span>THE CHURCH OF JESUS CHRIST OF LATTER DAY SAINTS | IJEBU-ODE STAKE YSA GP ATTENDANCE SYSTEM</span>
-        </div>
-    </header>
-    <div class="page-wrapper">
-        <nav class="sidebar">
-            <h2 style="color: var(--primary-blue); margin-bottom: var(--spacing-xl);">YSA</h2>
+<body class="admin-dashboard-page">
+    <div class="dashboard-shell">
+        <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle navigation menu">
+            <div class="mobile-nav-toggle-icon">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </button>
+
+        <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+
+        <nav class="sidebar admin-sidebar" id="adminSidebar" aria-label="Instructor navigation">
+            <div class="sidebar-brand">
+                <div>
+                    <div class="brand-mark" aria-hidden="true">YSA</div>
+                </div>
+                <div>
+                    <div class="brand-title">Instructor</div>
+                    <div class="brand-subtitle">Dashboard</div>
+                </div>
+                <button class="mobile-sidebar-close" id="mobileSidebarClose" aria-label="Close navigation menu">×</button>
+            </div>
+
+            <div class="sidebar-section-label">Navigation</div>
             <ul class="nav">
-                <li class="nav-item"><a href="#overview"    class="nav-link tab-btn active" data-tab="overview">Dashboard</a></li>
-                <li class="nav-item"><a href="#students"    class="nav-link tab-btn" data-tab="students">Students</a></li>
-                <li class="nav-item"><a href="#attendance"  class="nav-link tab-btn" data-tab="attendance">Attendance</a></li>
-                <li class="nav-item"><a href="#performance" class="nav-link tab-btn" data-tab="performance">Performance</a></li>
-                <li class="nav-item"><a href="#graduation"  class="nav-link tab-btn" data-tab="graduation">Graduation</a></li>
-                <li class="nav-item"><a href="#analytics"   class="nav-link tab-btn" data-tab="stats">Analytics</a></li>
+                <li class="nav-item"><a href="#overview" class="nav-link active" data-tab="overview"><span data-lucide="home"></span> <span>Dashboard</span></a></li>
+                <li class="nav-item"><a href="#students" class="nav-link" data-tab="students"><span data-lucide="users"></span> <span>Students</span></a></li>
+                <li class="nav-item"><a href="#attendance" class="nav-link" data-tab="attendance"><span data-lucide="calendar-check"></span> <span>Attendance</span></a></li>
+                <li class="nav-item"><a href="#performance" class="nav-link" data-tab="performance"><span data-lucide="trending-up"></span> <span>Performance</span></a></li>
+                <li class="nav-item"><a href="#graduation" class="nav-link" data-tab="graduation"><span data-lucide="graduation-cap"></span> <span>Graduation</span></a></li>
+                <li class="nav-item"><a href="#analytics" class="nav-link" data-tab="stats"><span data-lucide="bar-chart-3"></span> <span>Analytics</span></a></li>
             </ul>
+
+            <div class="sidebar-bottom">
+                <button id="logoutBtn" class="sidebar-nav-action" type="button"><span data-lucide="log-out" style="width: 16px; height: 16px; display: inline-block; margin-right: 8px;"></span>Logout</button>
+            </div>
         </nav>
 
-        <main class="main-content">
-            <!-- Content populated by JavaScript -->
-        </main>
+        <div class="dashboard-main-area">
+            <header class="dashboard-topbar">
+                <div>
+                    <div class="topbar-kicker">The Church of Jesus Christ of Latter-day Saints</div>
+                    <div class="topbar-title">IJEBU-ODE Stake YSA GP — Instructor Dashboard</div>
+                </div>
+                <span id="datetime" class="topbar-time"></span>
+            </header>
+
+            <main class="main-content">
+                <!-- Content populated by JavaScript -->
+            </main>
+
+            <footer class="footer">
+                <p>&copy; 2026 IJEBU-ODE STAKE YSA GP</p>
+            </footer>
+        </div>
     </div>
-
-    <footer class="footer">
-        <p>&copy; 2026 IJEBU-ODE STAKE YSA GP</p>
-        <span id="datetime"></span>
-    </footer>
-
-    <style>
-        .tab-navigation {
-            display: flex;
-            gap: var(--spacing-md);
-            border-bottom: var(--border-width) solid var(--border-color);
-            margin-bottom: var(--spacing-lg);
-        }
-        .tab-navigation .tab-btn {
-            padding: var(--spacing-md) var(--spacing-lg);
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--text-dark);
-            font-weight: 500;
-            border-bottom: 3px solid transparent;
-            transition: var(--transition);
-        }
-        .tab-navigation .tab-btn:hover  { color: var(--primary-blue); }
-        .tab-navigation .tab-btn.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
-    </style>
 
     <!-- BUG FIX: live clock -->
     <script>
@@ -64,12 +73,60 @@
         }
         updateClock();
         setInterval(updateClock, 60000);
+
+        // Initialize Lucide icons
+        if (window.lucide) {
+            window.lucide.createIcons();
+        }
     </script>
 
     <script type="module">
         import { InstructorDashboard } from '../js/modules/instructor-dashboard.js';
         const dashboard = new InstructorDashboard();
         dashboard.init();
+
+        // Mobile navigation handlers
+        const mobileNavToggle = document.getElementById('mobileNavToggle');
+        const mobileSidebarClose = document.getElementById('mobileSidebarClose');
+        const adminSidebar = document.getElementById('adminSidebar');
+        const mobileNavBackdrop = document.getElementById('mobileNavBackdrop');
+
+        function closeMobileSidebar() {
+            adminSidebar.classList.remove('show');
+            mobileNavBackdrop.classList.remove('show');
+        }
+
+        function openMobileSidebar() {
+            adminSidebar.classList.add('show');
+            mobileNavBackdrop.classList.add('show');
+        }
+
+        mobileNavToggle?.addEventListener('click', () => {
+            if (adminSidebar.classList.contains('show')) {
+                closeMobileSidebar();
+            } else {
+                openMobileSidebar();
+            }
+        });
+
+        mobileSidebarClose?.addEventListener('click', closeMobileSidebar);
+        mobileNavBackdrop?.addEventListener('click', closeMobileSidebar);
+
+        // Close sidebar when navigating
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                setTimeout(closeMobileSidebar, 100);
+            });
+        });
+
+        // Re-initialize Lucide icons after each dashboard render
+        const originalRenderDashboard = dashboard.renderDashboard;
+        dashboard.renderDashboard = function() {
+            originalRenderDashboard.call(this);
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        };
     </script>
 </body>
 </html>
