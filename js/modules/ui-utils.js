@@ -188,6 +188,86 @@ export function createButton(text, onClick, options = {}) {
   return button;
 }
 
+export function createActionMenu(actions = []) {
+  const container = document.createElement('div');
+  container.className = 'action-menu';
+
+  const menuBtn = createButton('⋯', null, { className: 'action-menu-btn btn-secondary' });
+  menuBtn.type = 'button';
+  menuBtn.setAttribute('aria-label', 'More actions');
+  menuBtn.setAttribute('aria-haspopup', 'menu');
+  menuBtn.setAttribute('aria-expanded', 'false');
+  menuBtn.setAttribute('title', 'More options');
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'action-menu-dropdown';
+  dropdown.setAttribute('role', 'menu');
+
+  const updateExpandedState = (isOpen) => {
+    menuBtn.setAttribute('aria-expanded', String(isOpen));
+    dropdown.classList.toggle('show', isOpen);
+  };
+
+  const cleanupListeners = () => {
+    document.removeEventListener('click', handleDocumentClick);
+    document.removeEventListener('keydown', handleEscape);
+  };
+
+  const closeDropdown = () => {
+    updateExpandedState(false);
+    cleanupListeners();
+  };
+
+  function handleDocumentClick(event) {
+    if (!container.contains(event.target)) {
+      closeDropdown();
+    }
+  }
+
+  function handleEscape(event) {
+    if (event.key === 'Escape') {
+      closeDropdown();
+    }
+  }
+
+  menuBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const isOpen = !dropdown.classList.contains('show');
+    updateExpandedState(isOpen);
+
+    if (isOpen) {
+      document.addEventListener('click', handleDocumentClick);
+      document.addEventListener('keydown', handleEscape);
+    } else {
+      cleanupListeners();
+    }
+  });
+
+  actions.forEach(action => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.setAttribute('role', 'menuitem');
+    item.className = `action-menu-item ${action.className || ''}`.trim();
+    item.textContent = action.label;
+
+    item.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      closeDropdown();
+
+      if (action.onClick) {
+        await action.onClick();
+      }
+    });
+
+    dropdown.appendChild(item);
+  });
+
+  container.appendChild(menuBtn);
+  container.appendChild(dropdown);
+
+  return container;
+}
+
 export function createInput(type, placeholder, id, options = {}) {
   const input = document.createElement('input');
   input.type = type;

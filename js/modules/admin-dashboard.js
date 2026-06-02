@@ -17,7 +17,8 @@ import { doc, setDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com
 import {
   clearElement, showNotification, createTable, createCard,
   createStatCard, createButton, createInput, createSelect,
-  createModal, createStatsSkeleton, createTableSkeleton, createTabSkeleton
+  createModal, createStatsSkeleton, createTableSkeleton, createTabSkeleton,
+  createActionMenu
 } from './ui-utils.js';
 import { createClassesSkeleton, createUsersSkeleton, createStudentsSkeleton, createAttendanceSkeleton, createAnalyticsSkeleton, createGraduationSkeleton } from './ui-utils.js';
 import { formatDate } from './ui-utils.js';
@@ -865,30 +866,12 @@ export class AdminDashboard {
         'Status': cls.isLocked ? '🔒 Locked' : '🔓 Unlocked',
         'Actions': () => {
           const wrap = document.createElement('div');
-          wrap.style.display = 'flex';
-          wrap.style.gap = '0.5rem';
-          wrap.style.flexWrap = 'wrap';
+          wrap.className = 'action-container action-container--class-row';
 
-          const viewBtn = createButton('View Participants', async () => {
-            viewBtn.disabled = true;
-            try {
-              await this.showClassParticipants(cls);
-            } finally {
-              viewBtn.disabled = false;
-            }
-          }, { className: 'btn-primary btn-small' });
-
-          const lockBtn = document.createElement('button');
-          lockBtn.className = 'btn btn-small btn-secondary';
-          lockBtn.textContent = cls.isLocked ? 'Unlock' : 'Lock';
-          lockBtn.addEventListener('click', async () => {
-            try { await updateClassLockStatus(cls.id, !cls.isLocked); await this.loadClasses(); this.renderClassesTab(); showNotification('Class updated', 'success'); }
-            catch { showNotification('Failed to update class', 'error'); }
-          });
-
-          const deleteBtn = createButton('Delete', async () => {
+          const handleDeleteClass = async () => {
             const content = document.createElement('div');
             content.innerHTML = `<p>Delete <strong>${cls.name}</strong>? This will remove the class and all associated data.</p>`;
+            let modal;
             const confirmBtn = createButton('Delete', async () => {
               try {
                 await deleteClass(cls.id);
@@ -902,11 +885,47 @@ export class AdminDashboard {
               modal.remove();
             }, { className: 'btn-danger' });
             const cancelBtn = createButton('Cancel', () => modal.remove());
-            const modal = createModal('Confirm delete class', content, [confirmBtn, cancelBtn]);
+            modal = createModal('Confirm delete class', content, [confirmBtn, cancelBtn]);
             document.body.appendChild(modal);
-          }, { className: 'btn-danger btn-small' });
+          };
 
-          wrap.append(viewBtn, lockBtn, deleteBtn);
+          const deleteBtn = createButton('Delete', handleDeleteClass, {
+            className: 'btn-danger btn-small action-inline action-inline-delete'
+          });
+
+          const actionMenu = createActionMenu([
+            {
+              label: 'View Participants',
+              onClick: async () => {
+                const classRecord = this.getClassRecordById(cls.id) || cls;
+                const students = this.getStudentsForClass(cls.id);
+                showClassParticipantsModal(classRecord, students);
+              },
+              className: 'btn-secondary'
+            },
+            {
+              label: cls.isLocked ? 'Unlock Class' : 'Lock Class',
+              onClick: async () => {
+                try {
+                  await updateClassLockStatus(cls.id, !cls.isLocked);
+                  await this.loadClasses();
+                  this.renderClassesTab();
+                  showNotification('Class updated', 'success');
+                } catch {
+                  showNotification('Failed to update class', 'error');
+                }
+              },
+              className: 'btn-secondary'
+            },
+            {
+              label: 'Delete Class',
+              onClick: handleDeleteClass,
+              className: 'btn-danger'
+            }
+          ]);
+          actionMenu.classList.add('action-menu--class-row');
+
+          wrap.append(deleteBtn, actionMenu);
           return wrap;
         }
       };
