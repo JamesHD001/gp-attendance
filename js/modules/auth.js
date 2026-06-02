@@ -6,8 +6,11 @@ import { auth, db, firebaseSignOut, authPersistenceReady } from '../firebase-con
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
+  reauthenticateWithCredential,
   linkWithCredential,
+  updatePassword,
   sendPasswordResetEmail,
+  EmailAuthProvider,
   GoogleAuthProvider,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js";
@@ -101,6 +104,10 @@ export class AuthService {
       default:
         return 'Login failed. Please try again.';
     }
+  }
+
+  static hasPasswordProvider(user = auth.currentUser) {
+    return Boolean(user?.providerData?.some((providerData) => providerData?.providerId === 'password'));
   }
 
   static getSessionRef(userId) {
@@ -441,6 +448,55 @@ export class AuthService {
       }
 
       throw new Error(error?.message || 'Unable to send password reset email.');
+    }
+  }
+
+  static async changePassword(currentPassword, newPassword) {
+    await AuthService.waitForAuthReady();
+
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('You must be signed in to change your password.');
+    }
+
+    if (!AuthService.hasPasswordProvider(user)) {
+      throw new Error('This account uses Google sign-in and does not have a password to change.');
+    }
+
+    const email = String(user.email || '').trim();
+    if (!email) {
+      throw new Error('A valid email address is required to change the password.');
+    }
+
+    const currentPasswordValue = String(currentPassword || '');
+    const newPasswordValue = String(newPassword || '');
+
+    if (!currentPasswordValue || !newPasswordValue) {
+      throw new Error('Current password and new password are required.');
+    }
+
+    try {
+      const credential = EmailAuthProvider.credential(email, currentPasswordValue);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPasswordValue);
+      return true;
+    } catch (error) {
+      console.error('Password update failed:', error);
+
+      switch (error?.code) {
+        case 'auth/invalid-credential':
+        case 'auth/invalid-login-credentials':
+        case 'auth/wrong-password':
+          throw new Error('Current password is incorrect.');
+        case 'auth/weak-password':
+          throw new Error('Your new password is too weak. Use at least 6 characters.');
+        case 'auth/requires-recent-login':
+          throw new Error('Please sign out and sign back in, then try again.');
+        case 'auth/user-mismatch':
+          throw new Error('Your current password does not match this account.');
+        default:
+          throw new Error(error?.message || 'Unable to change password.');
+      }
     }
   }
 

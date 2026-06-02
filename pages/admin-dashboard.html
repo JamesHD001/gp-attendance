@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="author" content="Henry Daniel James">
-    <title>Admin Dashboard - YSA GP Attendance System</title>
-    <link rel="stylesheet" href="../css/styles.css">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="theme-color" content="#0066cc">
+        <meta name="author" content="Henry Daniel James">
+        <title>Admin Dashboard - YSA GP Attendance System</title>
+        <link rel="stylesheet" href="../css/styles.css">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body class="admin-dashboard-page">
@@ -96,6 +97,10 @@
 
     <script type="module">
         import { AdminDashboard } from '../js/modules/admin-dashboard.js';
+        import { initTheme } from '../js/modules/theme.js';
+
+        initTheme();
+
         const dashboard = new AdminDashboard();
         dashboard.init();
 

@@ -20,6 +20,7 @@ import {
   createModal, createStatsSkeleton, createTableSkeleton, createTabSkeleton,
   createActionMenu
 } from './ui-utils.js';
+import { getThemePreference, toggleTheme } from './theme.js';
 import { createClassesSkeleton, createUsersSkeleton, createStudentsSkeleton, createAttendanceSkeleton, createAnalyticsSkeleton, createGraduationSkeleton } from './ui-utils.js';
 import { formatDate } from './ui-utils.js';
 import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
@@ -986,17 +987,17 @@ export class AdminDashboard {
     clearElement(tab);
 
     const header = document.createElement('div');
-    header.className = 'flex-between mb-lg';
+    header.className = 'dashboard-content-header settings-header mb-lg';
     header.innerHTML = `
       <div>
         <h2>Settings</h2>
-        <p class="text-muted">Update your name and contact details. Password and verification tools will be added later.</p>
+        <p class="text-muted">Manage your profile, appearance, and password from one place.</p>
       </div>
     `;
     tab.appendChild(header);
 
     if (this.isLoading) {
-      tab.appendChild(createTabSkeleton({ statsCount: 1, tableRows: 3, tableColumns: 2, showQuote: false }));
+      tab.appendChild(createTabSkeleton({ statsCount: 1, tableRows: 4, tableColumns: 2, showQuote: false }));
       return;
     }
 
@@ -1007,28 +1008,45 @@ export class AdminDashboard {
       address: ''
     };
 
-    const settingsCard = document.createElement('div');
-    settingsCard.className = 'card';
-    settingsCard.innerHTML = '<div class="card-header">Profile Settings</div>';
+    const settingsGrid = document.createElement('div');
+    settingsGrid.className = 'settings-grid';
 
-    const body = document.createElement('div');
-    body.className = 'card-body';
+    const profileCard = document.createElement('section');
+    profileCard.className = 'card settings-card';
+    profileCard.innerHTML = '<div class="card-header">Profile</div>';
 
-    const note = document.createElement('p');
-    note.className = 'text-muted';
-    note.textContent = 'Use the same email you want tied to this admin account. Some email changes may require a fresh sign-in before Firebase allows the update.';
-    body.appendChild(note);
+    const profileBody = document.createElement('div');
+    profileBody.className = 'card-body settings-card-body';
 
-    const roleText = document.createElement('p');
-    roleText.className = 'text-muted';
-    roleText.textContent = `Role: ${profile.role || 'admin'}`;
-    body.appendChild(roleText);
+    const profileNote = document.createElement('p');
+    profileNote.className = 'text-muted';
+    profileNote.textContent = 'Update the name and contact details stored on your account.';
+
+    const profileMeta = document.createElement('div');
+    profileMeta.className = 'settings-meta';
+
+    const roleRow = document.createElement('div');
+    roleRow.className = 'settings-meta-item';
+    const roleLabel = document.createElement('span');
+    roleLabel.className = 'settings-meta-label';
+    roleLabel.textContent = 'Role';
+    const roleValue = document.createElement('span');
+    roleValue.textContent = profile.role || 'admin';
+    roleRow.append(roleLabel, roleValue);
+
+    const emailRow = document.createElement('div');
+    emailRow.className = 'settings-meta-item';
+    const emailLabel = document.createElement('span');
+    emailLabel.className = 'settings-meta-label';
+    emailLabel.textContent = 'Email';
+    const emailValue = document.createElement('span');
+    emailValue.textContent = profile.email || this.currentUser?.email || '—';
+    emailRow.append(emailLabel, emailValue);
+
+    profileMeta.append(roleRow, emailRow);
 
     const form = document.createElement('div');
-    form.style.display = 'flex';
-    form.style.flexDirection = 'column';
-    form.style.gap = '0.75rem';
-    form.style.maxWidth = '640px';
+    form.className = 'settings-form';
 
     const nameInput = createInput('text', 'Full name', 'settingsName', { value: profile.name || '' });
     const emailInput = createInput('email', 'Email address', 'settingsEmail', { value: profile.email || this.currentUser?.email || '' });
@@ -1036,13 +1054,11 @@ export class AdminDashboard {
     const addressInput = createInput('text', 'Address', 'settingsAddress', { value: profile.address || '' });
 
     form.append(nameInput, emailInput, phoneInput, addressInput);
-    body.appendChild(form);
 
-    const actionRow = document.createElement('div');
-    actionRow.className = 'flex gap-md mt-lg';
-    actionRow.style.flexWrap = 'wrap';
+    const profileActions = document.createElement('div');
+    profileActions.className = 'settings-actions';
 
-    const saveBtn = createButton('Save Changes', async () => {
+    const saveBtn = createButton('Save profile', async () => {
       const nextName = (nameInput.value || '').trim();
       const nextEmail = (emailInput.value || '').trim();
       const nextPhone = (phoneInput.value || '').trim();
@@ -1117,10 +1133,136 @@ export class AdminDashboard {
       }
     }, { className: 'btn-primary' });
 
-    actionRow.appendChild(saveBtn);
-    body.appendChild(actionRow);
-    settingsCard.appendChild(body);
-    tab.appendChild(settingsCard);
+    profileActions.appendChild(saveBtn);
+    profileBody.append(profileNote, profileMeta, form, profileActions);
+    profileCard.appendChild(profileBody);
+
+    const appearanceCard = document.createElement('section');
+    appearanceCard.className = 'card settings-card';
+    appearanceCard.innerHTML = '<div class="card-header">Appearance</div>';
+
+    const appearanceBody = document.createElement('div');
+    appearanceBody.className = 'card-body settings-card-body';
+
+    const theme = getThemePreference();
+    const themeStatus = document.createElement('p');
+    themeStatus.className = 'settings-status';
+
+    const themeNote = document.createElement('p');
+    themeNote.className = 'text-muted';
+    themeNote.textContent = 'Theme preference is saved in your browser and applies across the login page and dashboards.';
+
+    const themeButton = createButton(theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode', () => {
+      const nextTheme = toggleTheme({ animate: true });
+      updateThemeControl(nextTheme);
+      showNotification(`Switched to ${nextTheme} mode`, 'success');
+    }, { className: 'btn-secondary settings-theme-button' });
+    themeButton.type = 'button';
+
+    const updateThemeControl = (themeName) => {
+      const isDark = themeName === 'dark';
+      themeStatus.textContent = isDark ? 'Dark mode is active.' : 'Light mode is active.';
+      themeButton.textContent = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+      themeButton.setAttribute('aria-label', themeButton.textContent);
+    };
+
+    updateThemeControl(theme);
+
+    appearanceBody.append(themeStatus, themeNote, themeButton);
+    appearanceCard.appendChild(appearanceBody);
+
+    const securityCard = document.createElement('section');
+    securityCard.className = 'card settings-card';
+    securityCard.innerHTML = '<div class="card-header">Security</div>';
+
+    const securityBody = document.createElement('div');
+    securityBody.className = 'card-body settings-card-body';
+
+    const securityNote = document.createElement('p');
+    securityNote.className = 'text-muted';
+    securityNote.textContent = AuthService.hasPasswordProvider(this.currentUser)
+      ? 'Change the password used to sign in with email and password.'
+      : 'This account uses Google sign-in, so there is no local password to change here.';
+
+    const changePasswordBtn = createButton('Change password', () => this.showChangePasswordModal(), { className: 'btn-primary' });
+    changePasswordBtn.type = 'button';
+    changePasswordBtn.disabled = !AuthService.hasPasswordProvider(this.currentUser);
+
+    securityBody.append(securityNote, changePasswordBtn);
+    securityCard.appendChild(securityBody);
+
+    settingsGrid.append(profileCard, appearanceCard, securityCard);
+    tab.appendChild(settingsGrid);
+  }
+
+  showChangePasswordModal() {
+    const currentPasswordInput = createInput('password', 'Current password', 'currentPassword');
+    const newPasswordInput = createInput('password', 'New password', 'newPassword');
+    const confirmPasswordInput = createInput('password', 'Confirm new password', 'confirmPassword');
+
+    currentPasswordInput.autocomplete = 'current-password';
+    newPasswordInput.autocomplete = 'new-password';
+    confirmPasswordInput.autocomplete = 'new-password';
+    currentPasswordInput.minLength = 6;
+    newPasswordInput.minLength = 6;
+    confirmPasswordInput.minLength = 6;
+
+    const content = document.createElement('div');
+    content.className = 'settings-password-modal';
+
+    const note = document.createElement('p');
+    note.className = 'text-muted';
+    note.textContent = 'Enter your current password first. Firebase requires a recent sign-in before changing a password.';
+
+    const errorText = document.createElement('div');
+    errorText.className = 'error-text hidden';
+    errorText.setAttribute('role', 'alert');
+
+    content.append(note, currentPasswordInput, newPasswordInput, confirmPasswordInput, errorText);
+
+    let modal;
+    const updateBtn = createButton('Update Password', async () => {
+      const currentPassword = currentPasswordInput.value || '';
+      const newPassword = newPasswordInput.value || '';
+      const confirmPassword = confirmPasswordInput.value || '';
+
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        errorText.textContent = 'Please complete all password fields.';
+        errorText.classList.remove('hidden');
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        errorText.textContent = 'New password must be at least 6 characters long.';
+        errorText.classList.remove('hidden');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        errorText.textContent = 'New password and confirmation do not match.';
+        errorText.classList.remove('hidden');
+        return;
+      }
+
+      updateBtn.disabled = true;
+      errorText.classList.add('hidden');
+
+      try {
+        await AuthService.changePassword(currentPassword, newPassword);
+        modal.remove();
+        showNotification('Password updated successfully', 'success');
+      } catch (error) {
+        console.error('Password change failed:', error);
+        errorText.textContent = error?.message || 'Failed to update password';
+        errorText.classList.remove('hidden');
+      } finally {
+        updateBtn.disabled = false;
+      }
+    }, { className: 'btn-primary' });
+
+    const cancelBtn = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
+    modal = createModal('Change Password', content, [updateBtn, cancelBtn]);
+    document.body.appendChild(modal);
   }
 
   async renderUsersTab() {

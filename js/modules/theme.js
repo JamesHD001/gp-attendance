@@ -24,6 +24,11 @@ export function applyTheme(theme = getThemePreference(), options = {}) {
   document.documentElement.dataset.theme = nextTheme;
   document.documentElement.style.colorScheme = nextTheme;
 
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute('content', nextTheme === 'dark' ? '#0b1220' : '#0066cc');
+  }
+
   if (persist) {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
