@@ -26,6 +26,7 @@ import { formatDate } from './ui-utils.js';
 import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
 import { showClassParticipantsModal } from './class-participants.js';
+import { renderSettingsTab as renderSharedSettingsTab } from './shared-settings.js';
 
 export class AdminDashboard {
   constructor() {
@@ -984,215 +985,32 @@ export class AdminDashboard {
 
   async renderSettingsTab() {
     const tab = document.getElementById('settingsTab');
-    clearElement(tab);
-
-    const header = document.createElement('div');
-    header.className = 'dashboard-content-header settings-header mb-lg';
-    header.innerHTML = `
-      <div>
-        <h2>Settings</h2>
-        <p class="text-muted">Manage your profile, appearance, and password from one place.</p>
-      </div>
-    `;
-    tab.appendChild(header);
-
-    if (this.isLoading) {
-      tab.appendChild(createTabSkeleton({ statsCount: 1, tableRows: 4, tableColumns: 2, showQuote: false }));
-      return;
-    }
-
-    const profile = this.currentUserProfile || this.users.find(user => user.id === this.currentUser?.uid) || {
-      name: this.currentUser?.displayName || '',
-      email: this.currentUser?.email || '',
-      phoneNumber: '',
-      address: ''
-    };
-
-    const settingsGrid = document.createElement('div');
-    settingsGrid.className = 'settings-grid';
-
-    const profileCard = document.createElement('section');
-    profileCard.className = 'card settings-card';
-    profileCard.innerHTML = '<div class="card-header">Profile</div>';
-
-    const profileBody = document.createElement('div');
-    profileBody.className = 'card-body settings-card-body';
-
-    const profileNote = document.createElement('p');
-    profileNote.className = 'text-muted';
-    profileNote.textContent = 'Update the name and contact details stored on your account.';
-
-    const profileMeta = document.createElement('div');
-    profileMeta.className = 'settings-meta';
-
-    const roleRow = document.createElement('div');
-    roleRow.className = 'settings-meta-item';
-    const roleLabel = document.createElement('span');
-    roleLabel.className = 'settings-meta-label';
-    roleLabel.textContent = 'Role';
-    const roleValue = document.createElement('span');
-    roleValue.textContent = profile.role || 'admin';
-    roleRow.append(roleLabel, roleValue);
-
-    const emailRow = document.createElement('div');
-    emailRow.className = 'settings-meta-item';
-    const emailLabel = document.createElement('span');
-    emailLabel.className = 'settings-meta-label';
-    emailLabel.textContent = 'Email';
-    const emailValue = document.createElement('span');
-    emailValue.textContent = profile.email || this.currentUser?.email || '—';
-    emailRow.append(emailLabel, emailValue);
-
-    profileMeta.append(roleRow, emailRow);
-
-    const form = document.createElement('div');
-    form.className = 'settings-form';
-
-    const nameInput = createInput('text', 'Full name', 'settingsName', { value: profile.name || '' });
-    const emailInput = createInput('email', 'Email address', 'settingsEmail', { value: profile.email || this.currentUser?.email || '' });
-    const phoneInput = createInput('text', 'Phone number', 'settingsPhone', { value: profile.phoneNumber || '' });
-    const addressInput = createInput('text', 'Address', 'settingsAddress', { value: profile.address || '' });
-
-    form.append(nameInput, emailInput, phoneInput, addressInput);
-
-    const profileActions = document.createElement('div');
-    profileActions.className = 'settings-actions';
-
-    const saveBtn = createButton('Save profile', async () => {
-      const nextName = (nameInput.value || '').trim();
-      const nextEmail = (emailInput.value || '').trim();
-      const nextPhone = (phoneInput.value || '').trim();
-      const nextAddress = (addressInput.value || '').trim();
-
-      if (!nextName || !nextEmail) {
-        showNotification('Name and email are required', 'warning');
-        return;
-      }
-
-      if (!this.currentUser?.uid) {
-        showNotification('Unable to identify the current user', 'error');
-        return;
-      }
-
-      saveBtn.disabled = true;
-      let notificationType = 'success';
-      let notificationMessage = 'Settings updated successfully';
-
-      try {
-        if (this.isDemoMode) {
-          this.currentUserProfile = {
-            ...profile,
-            name: nextName,
-            email: nextEmail,
-            phoneNumber: nextPhone,
-            address: nextAddress
-          };
-          this.renderSettingsTab();
-          showNotification('Settings updated in local demo mode', 'success');
-          return;
-        }
-
-        const updates = {
-          name: nextName,
-          phoneNumber: nextPhone,
-          address: nextAddress
+    return renderSharedSettingsTab(tab, {
+      title: 'Settings',
+      description: 'Manage your profile, email, appearance, and password from one place.',
+      currentUser: this.currentUser,
+      profile: this.currentUserProfile || this.users.find(user => user.id === this.currentUser?.uid) || {
+        name: this.currentUser?.displayName || '',
+        email: this.currentUser?.email || '',
+        phoneNumber: '',
+        address: '',
+        role: 'admin'
+      },
+      isLoading: this.isLoading,
+      isDemoMode: this.isDemoMode,
+      onProfileUpdated: async (updatedProfile) => {
+        this.currentUserProfile = {
+          ...(this.currentUserProfile || {}),
+          ...updatedProfile
         };
 
-        const currentEmail = profile.email || this.currentUser?.email || '';
-        if (nextEmail !== currentEmail) {
-          try {
-            if (auth.currentUser) {
-              await updateAuthEmail(auth.currentUser, nextEmail);
-            }
-            updates.email = nextEmail;
-          } catch (error) {
-            if (error?.code === 'auth/requires-recent-login') {
-              notificationType = 'warning';
-              notificationMessage = 'Name and contact details were saved, but email changes require you to log out and sign in again before retrying.';
-            } else if (error?.code === 'auth/invalid-email') {
-              throw new Error('Please enter a valid email address.');
-            } else if (error?.code === 'auth/email-already-in-use') {
-              throw new Error('That email address is already in use.');
-            } else {
-              throw error;
-            }
-          }
-        } else {
-          updates.email = nextEmail;
+        if (!this.isDemoMode) {
+          await Promise.all([this.loadUsers(), this.loadCurrentUserProfile()]);
         }
 
-        await updateUser(this.currentUser.uid, updates);
-        await Promise.all([this.loadUsers(), this.loadCurrentUserProfile()]);
         this.renderSettingsTab();
-        showNotification(notificationMessage, notificationType);
-      } catch (error) {
-        console.error('Failed to update settings', error);
-        showNotification(error?.message || 'Failed to update settings', 'error');
-      } finally {
-        saveBtn.disabled = false;
       }
-    }, { className: 'btn-primary' });
-
-    profileActions.appendChild(saveBtn);
-    profileBody.append(profileNote, profileMeta, form, profileActions);
-    profileCard.appendChild(profileBody);
-
-    const appearanceCard = document.createElement('section');
-    appearanceCard.className = 'card settings-card';
-    appearanceCard.innerHTML = '<div class="card-header">Appearance</div>';
-
-    const appearanceBody = document.createElement('div');
-    appearanceBody.className = 'card-body settings-card-body';
-
-    const theme = getThemePreference();
-    const themeStatus = document.createElement('p');
-    themeStatus.className = 'settings-status';
-
-    const themeNote = document.createElement('p');
-    themeNote.className = 'text-muted';
-    themeNote.textContent = 'Theme preference is saved in your browser and applies across the login page and dashboards.';
-
-    const themeButton = createButton(theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode', () => {
-      const nextTheme = toggleTheme({ animate: true });
-      updateThemeControl(nextTheme);
-      showNotification(`Switched to ${nextTheme} mode`, 'success');
-    }, { className: 'btn-secondary settings-theme-button' });
-    themeButton.type = 'button';
-
-    const updateThemeControl = (themeName) => {
-      const isDark = themeName === 'dark';
-      themeStatus.textContent = isDark ? 'Dark mode is active.' : 'Light mode is active.';
-      themeButton.textContent = isDark ? 'Switch to light mode' : 'Switch to dark mode';
-      themeButton.setAttribute('aria-label', themeButton.textContent);
-    };
-
-    updateThemeControl(theme);
-
-    appearanceBody.append(themeStatus, themeNote, themeButton);
-    appearanceCard.appendChild(appearanceBody);
-
-    const securityCard = document.createElement('section');
-    securityCard.className = 'card settings-card';
-    securityCard.innerHTML = '<div class="card-header">Security</div>';
-
-    const securityBody = document.createElement('div');
-    securityBody.className = 'card-body settings-card-body';
-
-    const securityNote = document.createElement('p');
-    securityNote.className = 'text-muted';
-    securityNote.textContent = AuthService.hasPasswordProvider(this.currentUser)
-      ? 'Change the password used to sign in with email and password.'
-      : 'This account uses Google sign-in, so there is no local password to change here.';
-
-    const changePasswordBtn = createButton('Change password', () => this.showChangePasswordModal(), { className: 'btn-primary' });
-    changePasswordBtn.type = 'button';
-    changePasswordBtn.disabled = !AuthService.hasPasswordProvider(this.currentUser);
-
-    securityBody.append(securityNote, changePasswordBtn);
-    securityCard.appendChild(securityBody);
-
-    settingsGrid.append(profileCard, appearanceCard, securityCard);
-    tab.appendChild(settingsGrid);
+    });
   }
 
   showChangePasswordModal() {

@@ -21,6 +21,7 @@ import {
   getMillisecondsUntilNextMinute,
   getNigeriaDateKey
 } from './instructor-attendance-lock.js';
+import { renderSettingsTab as renderSharedSettingsTab } from './shared-settings.js';
 
 export class InstructorDashboard {
   constructor() {
@@ -49,7 +50,14 @@ export class InstructorDashboard {
     if (isLocal) {
       this.isDemoMode = true;
       this.currentUser = AuthService.getCurrentUser();
-      this.userData = { name: 'Local Instructor', assignedClassId: 'local-class' };
+      this.userData = {
+        name: 'Local Instructor',
+        email: this.currentUser?.email || 'instructor@example.test',
+        role: 'instructor',
+        assignedClassId: 'local-class',
+        phoneNumber: '',
+        address: ''
+      };
       this.assignedClass = 'local-class';
       this.assignedClassName = 'Demo Class';
       this.startAttendanceLockMonitor();
@@ -217,6 +225,7 @@ export class InstructorDashboard {
       <div id="performanceTab" class="tab-content hidden"></div>
       <div id="graduationTab" class="tab-content hidden"></div>
       <div id="statsTab" class="tab-content hidden"></div>
+      <div id="settingsTab" class="tab-content hidden"></div>
     `;
     this.renderOverviewTab();
   }
@@ -242,7 +251,7 @@ export class InstructorDashboard {
 
     window.addEventListener('hashchange', () => {
       const hash = location.hash.replace('#', '');
-      const map = { overview: 'overview', students: 'students', attendance: 'attendance', performance: 'performance', graduation: 'graduation', analytics: 'stats' };
+      const map = { overview: 'overview', students: 'students', attendance: 'attendance', performance: 'performance', graduation: 'graduation', analytics: 'stats', settings: 'settings' };
       const tabName = map[hash] || hash;
       if (tabName) this.switchTab(tabName);
     });

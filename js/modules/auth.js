@@ -7,7 +7,9 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   reauthenticateWithCredential,
+  reauthenticateWithPopup,
   linkWithCredential,
+  updateEmail,
   updatePassword,
   sendPasswordResetEmail,
   EmailAuthProvider,
@@ -108,6 +110,10 @@ export class AuthService {
 
   static hasPasswordProvider(user = auth.currentUser) {
     return Boolean(user?.providerData?.some((providerData) => providerData?.providerId === 'password'));
+  }
+
+  static hasGoogleProvider(user = auth.currentUser) {
+    return Boolean(user?.providerData?.some((providerData) => providerData?.providerId === GoogleAuthProvider.PROVIDER_ID));
   }
 
   static getSessionRef(userId) {
@@ -496,6 +502,66 @@ export class AuthService {
           throw new Error('Your current password does not match this account.');
         default:
           throw new Error(error?.message || 'Unable to change password.');
+      }
+    }
+  }
+
+  static async changeEmail(nextEmail, options = {}) {
+    await AuthService.waitForAuthReady();
+
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('You must be signed in to change your email address.');
+    }
+
+    const normalizedEmail = String(nextEmail || '').trim();
+    if (!normalizedEmail) {
+      throw new Error('Email address is required.');
+    }
+
+    if (normalizedEmail === String(user.email || '').trim()) {
+      return true;
+    }
+
+    try {
+      if (AuthService.hasPasswordProvider(user)) {
+        const currentPassword = String(options.currentPassword || '');
+        if (!currentPassword) {
+          throw new Error('Current password is required to update your email.');
+        }
+
+        const credential = EmailAuthProvider.credential(String(user.email || ''), currentPassword);
+        await reauthenticateWithCredential(user, credential);
+      } else if (AuthService.hasGoogleProvider(user)) {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        await reauthenticateWithPopup(user, provider);
+      } else {
+        throw new Error('This account cannot change its email address from the settings page.');
+      }
+
+      await updateEmail(user, normalizedEmail);
+      return true;
+    } catch (error) {
+      console.error('Email update failed:', error);
+
+      switch (error?.code) {
+        case 'auth/invalid-email':
+          throw new Error('Please enter a valid email address.');
+        case 'auth/email-already-in-use':
+          throw new Error('That email address is already in use.');
+        case 'auth/popup-blocked':
+          throw new Error('Your browser blocked the Google re-authentication pop-up. Allow pop-ups and try again.');
+        case 'auth/popup-closed-by-user':
+          throw new Error('Google re-authentication was cancelled.');
+        case 'auth/requires-recent-login':
+          throw new Error('Please sign out and sign back in, then try again.');
+        case 'auth/invalid-credential':
+        case 'auth/invalid-login-credentials':
+        case 'auth/wrong-password':
+          throw new Error('Current password is incorrect.');
+        default:
+          throw new Error(error?.message || 'Unable to change email address.');
       }
     }
   }
