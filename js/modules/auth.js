@@ -5,6 +5,10 @@ import { auth, db, firebaseSignOut, authPersistenceReady } from '../firebase-con
 
 import {
   signInWithEmailAndPassword,
+  signInWithPopup,
+  linkWithCredential,
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-auth.js";
 
@@ -88,6 +92,12 @@ export class AuthService {
         return 'Too many sign-in attempts. Please wait a moment and try again.';
       case 'auth/network-request-failed':
         return 'Unable to reach Firebase right now. Check your internet connection and try again.';
+      case 'auth/popup-closed-by-user':
+        return 'Google sign-in was cancelled.';
+      case 'auth/popup-blocked':
+        return 'Your browser blocked the Google sign-in pop-up. Allow pop-ups and try again.';
+      case 'auth/account-exists-with-different-credential':
+        return 'An account already exists with this email address. Sign in with your password to link Google.';
       default:
         return 'Login failed. Please try again.';
     }
@@ -329,6 +339,108 @@ export class AuthService {
       throw new Error(AuthService.getLoginErrorMessage(error));
     } finally {
       AuthService.isHydratingSession = false;
+    }
+  }
+
+  static async loginWithGoogle() {
+    await AuthService.waitForAuthReady();
+    AuthService.clearPendingSessionHydration();
+    AuthService.isHydratingSession = true;
+
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+
+      const userCredential = await signInWithPopup(auth, provider);
+      AuthService.markPendingSessionHydration(userCredential.user.uid);
+      await AuthService.startSession(userCredential.user);
+      return userCredential.user;
+    } catch (error) {
+      console.error('Google Login Error:', error);
+
+      const pendingCredential =
+        GoogleAuthProvider.credentialFromError(error) ||
+        error?.credential ||
+        null;
+
+      if (error?.code === 'auth/account-exists-with-different-credential' && pendingCredential) {
+        const linkError = new Error(
+          'An account already exists for this email. Sign in with your password to link Google to the same account.'
+        );
+        linkError.code = error.code;
+        linkError.email = error?.customData?.email || error?.email || '';
+        linkError.pendingCredential = pendingCredential;
+        throw linkError;
+      }
+
+      AuthService.clearPendingSessionHydration();
+      throw new Error(AuthService.getLoginErrorMessage(error));
+    } finally {
+      AuthService.isHydratingSession = false;
+    }
+  }
+
+  static async linkGoogleCredentialWithPassword(email, password, pendingCredential) {
+    await AuthService.waitForAuthReady();
+
+    if (!email || !password) {
+      throw new Error('Email and password are required.');
+    }
+
+    if (!pendingCredential) {
+      throw new Error('Missing Google sign-in credential.');
+    }
+
+    AuthService.clearPendingSessionHydration();
+    AuthService.isHydratingSession = true;
+
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const linkedCredential = await linkWithCredential(userCredential.user, pendingCredential);
+      AuthService.markPendingSessionHydration(linkedCredential.user.uid);
+      await AuthService.startSession(linkedCredential.user);
+      return linkedCredential.user;
+    } catch (error) {
+      console.error('Google account linking failed:', error);
+
+      if (error?.code === 'auth/provider-already-linked') {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          AuthService.markPendingSessionHydration(currentUser.uid);
+          await AuthService.startSession(currentUser);
+          return currentUser;
+        }
+      }
+
+      throw new Error(AuthService.getLoginErrorMessage(error));
+    } finally {
+      AuthService.isHydratingSession = false;
+    }
+  }
+
+  static async sendPasswordReset(email) {
+    await AuthService.waitForAuthReady();
+
+    const normalizedEmail = String(email || '').trim();
+    if (!normalizedEmail) {
+      throw new Error('Please enter your email address.');
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, normalizedEmail);
+      return true;
+    } catch (error) {
+      console.error('Password reset failed:', error);
+
+      if (error?.code === 'auth/user-not-found') {
+        return true;
+      }
+
+      if (error?.code === 'auth/invalid-email') {
+        throw new Error('Please enter a valid email address.');
+      }
+
+      throw new Error(error?.message || 'Unable to send password reset email.');
     }
   }
 

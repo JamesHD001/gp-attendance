@@ -3,65 +3,200 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="theme-color" content="#0066cc">
         <title>YSA GP Attendance System - Login</title>
+        <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230066cc'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial, sans-serif' font-size='24' font-weight='700' fill='white'%3EGP%3C/text%3E%3C/svg%3E">
         <link rel="stylesheet" href="css/styles.css">
+        <script src="https://unpkg.com/lucide@latest"></script>
     </head>
-    <body>
+    <body class="login-page">
         <div class="login-container">
-            <div class="login-box">
-                <h1>YSA Attendance</h1>
-                <form id="loginForm">
-                    <div class="form-group">
-                        <label for="email">Email Address</label>
-                        <input type="email" id="email" placeholder="Enter your email" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" placeholder="Enter your password" required>
-                    </div>
-
-                    <div id="loginError" class="error-text hidden"></div>
-
-                    <button type="submit" class="btn btn-primary login-button" id="loginBtn">
-                        Sign In
-                    </button>
-                </form>
-
-                <p style="text-align: center; margin-top: var(--spacing-xl); color: var(--text-light); font-size: 12px;">
-                    Powered by YSA GP Program
-                </p>
+            <div class="login-bg" aria-hidden="true">
+                <span class="login-orb login-orb-one"></span>
+                <span class="login-orb login-orb-two"></span>
+                <span class="login-orb login-orb-three"></span>
             </div>
+
+            <main class="auth-shell">
+                <section class="auth-hero" aria-label="Overview">
+                    <div class="auth-brand">
+                        <span class="auth-brand-mark">GP</span>
+                        <div>
+                            <p class="auth-brand-kicker">IJEBU-ODE Stake YSA</p>
+                            <h1>Gather, serve, and track attendance with clarity.</h1>
+                        </div>
+                    </div>
+
+                    <p class="auth-lead">
+                        Manage class schedules, attendance, and dashboard access in one place for administrators,
+                        instructors, and leaders.
+                    </p>
+
+                    <div class="auth-metrics" aria-label="Key details">
+                        <article class="auth-metric">
+                            <span class="auth-metric-value">2x</span>
+                            <span class="auth-metric-label">Weekly class rhythm</span>
+                        </article>
+                        <article class="auth-metric">
+                            <span class="auth-metric-value">3</span>
+                            <span class="auth-metric-label">Role-based dashboards</span>
+                        </article>
+                        <article class="auth-metric">
+                            <span class="auth-metric-value">1</span>
+                            <span class="auth-metric-label">Shared attendance system</span>
+                        </article>
+                    </div>
+
+                    <div class="auth-feature-list">
+                        <div class="auth-feature">
+                            <span class="auth-feature-icon" data-lucide="calendar-days"></span>
+                            <div>
+                                <h2>Weekly cadence</h2>
+                                <p>Classes hold every Wednesday and Friday for all core categories.</p>
+                            </div>
+                        </div>
+                        <div class="auth-feature">
+                            <span class="auth-feature-icon" data-lucide="shield-check"></span>
+                            <div>
+                                <h2>Protected access</h2>
+                                <p>Every account is routed to its assigned role and permission set.</p>
+                            </div>
+                        </div>
+                        <div class="auth-feature">
+                            <span class="auth-feature-icon" data-lucide="sparkles"></span>
+                            <div>
+                                <h2>Clean reporting</h2>
+                                <p>Attendance, users, and class tools stay in a single, responsive workspace.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <blockquote class="auth-quote">
+                        <p>"By small and simple things are great things brought to pass."</p>
+                        <footer>Alma 37:6</footer>
+                    </blockquote>
+                </section>
+
+                <section class="login-box auth-panel" aria-label="Sign in form">
+                    <div class="auth-panel-header">
+                        <div>
+                            <p class="auth-eyebrow">Sign in</p>
+                            <h2>Welcome back</h2>
+                            <p class="auth-panel-copy">
+                                Use your assigned account to continue into the dashboard that matches your role.
+                            </p>
+                        </div>
+                    </div>
+
+                    <form id="loginForm" class="auth-form" novalidate>
+                        <div class="form-group">
+                            <label for="email">Email Address</label>
+                            <input type="email" id="email" placeholder="Enter your email" autocomplete="email" required>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="form-label-row">
+                                <label for="password">Password</label>
+                                <button type="button" class="auth-link-button" id="forgotPasswordBtn">Forgot password?</button>
+                            </div>
+                            <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password" required>
+                        </div>
+
+                        <div id="loginError" class="error-text hidden" role="alert" aria-live="polite"></div>
+
+                        <div class="auth-divider" aria-hidden="true">
+                            <span></span>
+                            <p>or</p>
+                            <span></span>
+                        </div>
+
+                        <div class="auth-actions">
+                            <button type="submit" class="btn btn-primary login-button" id="loginBtn">
+                                <span class="button-label">Sign In</span>
+                            </button>
+
+                            <button type="button" class="btn auth-provider-button" id="googleLoginBtn">
+                                <span class="auth-provider-mark" aria-hidden="true">G</span>
+                                <span class="button-label">Continue with Google</span>
+                            </button>
+                        </div>
+
+                        <p class="auth-note">
+                            Google sign-in follows the same dashboard roles, permissions, and session controls as email login.
+                        </p>
+                    </form>
+                </section>
+            </main>
         </div>
 
         <script type="module">
             import { AuthService } from './js/modules/auth.js';
-            import { showNotification } from './js/modules/ui-utils.js';
+            import { createButton, createInput, createModal, showNotification } from './js/modules/ui-utils.js';
 
             const loginForm = document.getElementById('loginForm');
             const emailInput = document.getElementById('email');
             const passwordInput = document.getElementById('password');
             const loginBtn = document.getElementById('loginBtn');
+            const googleLoginBtn = document.getElementById('googleLoginBtn');
+            const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
             const loginError = document.getElementById('loginError');
-            let redirectInProgress = false;
 
-            AuthService.showReasonFromUrl();
+            const state = {
+                redirectInProgress: false,
+                googleLinkingInProgress: false
+            };
+
+            function preserveButtonMarkup(button) {
+                if (button && !button.dataset.defaultHtml) {
+                    button.dataset.defaultHtml = button.innerHTML;
+                }
+            }
+
+            function setButtonLoading(button, isLoading, loadingLabel) {
+                if (!button) return;
+                preserveButtonMarkup(button);
+
+                if (isLoading) {
+                    button.disabled = true;
+                    button.classList.add('is-loading');
+                    button.innerHTML = `
+                        <span class="button-spinner" aria-hidden="true"></span>
+                        <span class="button-label">${loadingLabel || 'Loading'}</span>
+                    `;
+                } else {
+                    button.classList.remove('is-loading');
+                    button.disabled = false;
+                    button.innerHTML = button.dataset.defaultHtml || button.innerHTML;
+                }
+            }
+
+            function setAuxiliaryControlsDisabled(disabled) {
+                forgotPasswordBtn.disabled = disabled;
+                if (disabled) {
+                    googleLoginBtn.disabled = true;
+                }
+            }
+
+            function clearLoginError() {
+                loginError.textContent = '';
+                loginError.classList.add('hidden');
+            }
 
             function showLoginError(message) {
                 loginError.textContent = message;
                 loginError.classList.remove('hidden');
-                loginBtn.disabled = false;
-                redirectInProgress = false;
             }
 
             async function loadDashboardForUser(user) {
-                if (!user || redirectInProgress) {
+                if (!user || state.redirectInProgress || state.googleLinkingInProgress) {
                     return;
                 }
 
-                redirectInProgress = true;
-                loginBtn.disabled = true;
-                loginError.classList.add('hidden');
+                state.redirectInProgress = true;
+                clearLoginError();
+                setButtonLoading(loginBtn, true, 'Loading dashboard...');
+                setButtonLoading(googleLoginBtn, true, 'Loading dashboard...');
+                forgotPasswordBtn.disabled = true;
 
                 try {
                     const sessionIsActive = await AuthService.ensureSessionActive(user);
@@ -87,49 +222,192 @@
                 } catch (error) {
                     console.error('Post-login redirect failed:', error);
                     showLoginError(error.message || 'Login succeeded, but the dashboard could not be opened.');
+                    state.redirectInProgress = false;
+                    setButtonLoading(loginBtn, false);
+                    setButtonLoading(googleLoginBtn, false);
+                    forgotPasswordBtn.disabled = false;
                 }
             }
 
-            // Redirect whenever an authenticated user is observed
+            function openPasswordResetModal() {
+                clearLoginError();
+
+                let modal;
+                const content = document.createElement('div');
+                content.className = 'auth-modal-content';
+
+                const note = document.createElement('p');
+                note.className = 'text-muted';
+                note.textContent = 'Enter the email address on your account and we will send a password reset link if the address is valid.';
+
+                const resetEmailInput = createInput('email', 'name@example.com', 'resetEmail');
+                resetEmailInput.value = emailInput.value.trim();
+                resetEmailInput.autocomplete = 'email';
+
+                const modalError = document.createElement('div');
+                modalError.className = 'error-text hidden';
+                modalError.setAttribute('role', 'alert');
+
+                content.append(note, resetEmailInput, modalError);
+
+                const sendButton = createButton('Send Reset Link', async () => {
+                    const resetEmail = resetEmailInput.value.trim();
+
+                    if (!resetEmail) {
+                        modalError.textContent = 'Please enter your email address.';
+                        modalError.classList.remove('hidden');
+                        return;
+                    }
+
+                    sendButton.disabled = true;
+                    cancelButton.disabled = true;
+
+                    try {
+                        await AuthService.sendPasswordReset(resetEmail);
+                        modal.remove();
+                        showNotification('If an account exists, a password reset email has been sent.', 'success');
+                    } catch (error) {
+                        modalError.textContent = error.message || 'Unable to send reset email.';
+                        modalError.classList.remove('hidden');
+                    } finally {
+                        sendButton.disabled = false;
+                        cancelButton.disabled = false;
+                    }
+                }, { className: 'btn-primary' });
+
+                const cancelButton = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
+                modal = createModal('Reset Password', content, [sendButton, cancelButton]);
+                modal.classList.add('auth-modal');
+                document.body.appendChild(modal);
+                window.requestAnimationFrame(() => resetEmailInput.focus());
+            }
+
+            function openGoogleLinkModal(email, pendingCredential) {
+                clearLoginError();
+
+                let modal;
+                const content = document.createElement('div');
+                content.className = 'auth-modal-content';
+
+                const note = document.createElement('p');
+                note.className = 'text-muted';
+                note.textContent = `An account already exists for ${email || 'this address'}. Sign in with the existing password to link Google to the same dashboard account.`;
+
+                const emailChip = document.createElement('div');
+                emailChip.className = 'auth-link-email';
+                emailChip.textContent = email || 'Existing account email';
+
+                const passwordField = createInput('password', 'Enter your password', 'googleLinkPassword');
+                passwordField.autocomplete = 'current-password';
+
+                const modalError = document.createElement('div');
+                modalError.className = 'error-text hidden';
+                modalError.setAttribute('role', 'alert');
+
+                content.append(note, emailChip, passwordField, modalError);
+
+                const linkButton = createButton('Link Google Account', async () => {
+                    const password = passwordField.value;
+
+                    if (!password) {
+                        modalError.textContent = 'Please enter your password.';
+                        modalError.classList.remove('hidden');
+                        return;
+                    }
+
+                    state.googleLinkingInProgress = true;
+                    linkButton.disabled = true;
+                    cancelButton.disabled = true;
+
+                    try {
+                        const user = await AuthService.linkGoogleCredentialWithPassword(email, password, pendingCredential);
+                        modal.remove();
+                        showNotification('Google account linked successfully.', 'success');
+                        await loadDashboardForUser(user);
+                    } catch (error) {
+                        modalError.textContent = error.message || 'Unable to link Google to this account.';
+                        modalError.classList.remove('hidden');
+                    } finally {
+                        state.googleLinkingInProgress = false;
+                        linkButton.disabled = false;
+                        cancelButton.disabled = false;
+                    }
+                }, { className: 'btn-primary' });
+
+                const cancelButton = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
+                modal = createModal('Link Google to Existing Account', content, [linkButton, cancelButton]);
+                modal.classList.add('auth-modal');
+                document.body.appendChild(modal);
+                window.requestAnimationFrame(() => passwordField.focus());
+            }
+
+            AuthService.showReasonFromUrl();
+
+            [loginBtn, googleLoginBtn].forEach(preserveButtonMarkup);
+
             AuthService.onAuthStateChanged(async (user) => {
-                if (user) {
+                if (user && !state.googleLinkingInProgress) {
                     await loadDashboardForUser(user);
                 }
             });
 
-            loginForm.addEventListener('submit', async (e) => {
-
-                e.preventDefault();
-
-                loginError.classList.add('hidden');
-                loginBtn.disabled = true;
+            loginForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                clearLoginError();
+                setButtonLoading(loginBtn, true, 'Signing in...');
+                setAuxiliaryControlsDisabled(true);
 
                 try {
-
                     const email = emailInput.value.trim();
                     const password = passwordInput.value;
 
                     if (!email || !password) {
-                        throw new Error('Please fill in all fields');
+                        throw new Error('Please fill in all fields.');
                     }
 
                     const user = await AuthService.login(email, password);
-
                     showNotification('Login successful! Loading dashboard...', 'success');
-
                     await loadDashboardForUser(user);
-
                 } catch (error) {
-
-                    loginError.textContent =
-                        error.message || 'Login failed. Please try again.';
-
-                    loginError.classList.remove('hidden');
-                    loginBtn.disabled = false;
-
+                    showLoginError(error.message || 'Login failed. Please try again.');
+                } finally {
+                    if (!state.redirectInProgress) {
+                        setButtonLoading(loginBtn, false);
+                        setAuxiliaryControlsDisabled(false);
+                    }
                 }
-
             });
+
+            googleLoginBtn.addEventListener('click', async () => {
+                clearLoginError();
+                setButtonLoading(googleLoginBtn, true, 'Connecting...');
+                loginBtn.disabled = true;
+                forgotPasswordBtn.disabled = true;
+
+                try {
+                    const user = await AuthService.loginWithGoogle();
+                    showNotification('Google sign-in successful! Loading dashboard...', 'success');
+                    await loadDashboardForUser(user);
+                } catch (error) {
+                    if (error?.code === 'auth/account-exists-with-different-credential' && error.pendingCredential) {
+                        openGoogleLinkModal(error.email || emailInput.value.trim(), error.pendingCredential);
+                    } else {
+                        showLoginError(error.message || 'Google sign-in failed. Please try again.');
+                    }
+                } finally {
+                    if (!state.redirectInProgress) {
+                        setButtonLoading(googleLoginBtn, false);
+                        loginBtn.disabled = false;
+                        forgotPasswordBtn.disabled = false;
+                    }
+                }
+            });
+
+            forgotPasswordBtn.addEventListener('click', openPasswordResetModal);
+
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
         </script>
     </body>
 </html>
