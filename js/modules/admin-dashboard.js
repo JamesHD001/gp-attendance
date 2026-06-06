@@ -1190,6 +1190,7 @@ export class AdminDashboard {
           wrap.style.gap = '0.5rem';
 
           const editBtn = createButton('Edit', () => this.showEditStudentModal(student), { className: 'btn-secondary btn-small' });
+          const assignBtn = createButton('Assign to Class', () => this.showAssignStudentClassModal(student), { className: 'btn-primary btn-small' });
 
           const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger btn-small'; delBtn.textContent = 'Delete';
           delBtn.addEventListener('click', () => {
@@ -1222,6 +1223,7 @@ export class AdminDashboard {
           });
 
           wrap.appendChild(editBtn);
+          wrap.appendChild(assignBtn);
           wrap.appendChild(delBtn);
           return wrap;
         }
@@ -1276,6 +1278,52 @@ export class AdminDashboard {
     });
     const cancelBtn = createButton('Cancel', () => modal.remove());
     modal = createModal('Add Student', form, [createBtn, cancelBtn]);
+    document.body.appendChild(modal);
+  }
+
+
+  showAssignStudentClassModal(student) {
+    const classSelect = createSelect([
+      { label: 'Select Class...', value: '' },
+      ...this.classes.map(c => ({ label: c.name, value: c.id }))
+    ], 'assignStudentClass', student.classId || '');
+
+    const form = document.createElement('div');
+    form.style.display = 'flex';
+    form.style.flexDirection = 'column';
+    form.style.gap = '0.75rem';
+
+    const info = document.createElement('p');
+    info.textContent = `Assign ${student.name || 'student'} to a class.`;
+    form.append(info, classSelect);
+
+    const assignBtn = createButton('Assign', async () => {
+      const classId = classSelect.value;
+      if (!classId) {
+        showNotification('Please select a class', 'warning');
+        return;
+      }
+
+      try {
+        const updates = { classId };
+        const nextSharedClassIds = (student.sharedClassIds || []).filter(sharedClassId => sharedClassId !== classId);
+        if (nextSharedClassIds.length !== (student.sharedClassIds || []).length) {
+          updates.sharedClassIds = nextSharedClassIds;
+        }
+
+        await updateStudent(student.id, updates);
+        await this.loadStudents();
+        this.renderStudentsTab();
+        showNotification('Student assigned to class', 'success');
+        modal.remove();
+      } catch (error) {
+        console.error('Failed to assign class', error);
+        showNotification('Failed to assign student to class', 'error');
+      }
+    }, { className: 'btn-primary' });
+
+    const cancelBtn = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
+    const modal = createModal('Assign Student to Class', form, [assignBtn, cancelBtn]);
     document.body.appendChild(modal);
   }
 
