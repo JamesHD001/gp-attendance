@@ -27,7 +27,10 @@ const CORE_GENERAL_CLASS_DEFINITIONS = [
   { name: 'Institute of Religion', aliases: ['Institute'] },
   { name: 'Temple & Family History', aliases: ['Family History', 'Temple and Family History'] },
   { name: 'Temple Prep', aliases: ['Temple Preparation'] },
-  { name: 'Self-Reliance', aliases: ['Self Reliance'] }
+  { name: 'Self-Reliance', aliases: ['Self Reliance'] },
+  { name: 'Mission Preparation', aliases: ['Mission Prep'] },
+  { name: 'BYU Pathway', aliases: ['Pathway'] },
+  { name: 'Guest', aliases: [] }
 ];
 
 export const CORE_GENERAL_CLASS_NAMES = CORE_GENERAL_CLASS_DEFINITIONS.map(item => item.name);
