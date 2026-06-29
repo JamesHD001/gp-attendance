@@ -16,13 +16,13 @@ import {
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: 'AIzaSyDshXOLzDSZnRK6B4vPVQgIT1ILhQS50GM',
-  authDomain: 'ysa-gp-attendance.firebaseapp.com',
-  projectId: 'ysa-gp-attendance',
-  storageBucket: 'ysa-gp-attendance.firebasestorage.app',
-  messagingSenderId: '125191084521',
-  appId: '1:125191084521:web:dd61d93fa5e0c477b7d378',
-  measurementId: 'G-62NCJBYJ36'
+  apiKey: 'FIREBASE_API_KEY',
+  authDomain: 'FIREBASE_AUTH_DOMAIN',
+  projectId: 'FIREBASE_PROJECT_ID',
+  storageBucket: 'FIREBASE_STORAGE_BUCKET',
+  messagingSenderId: 'FIREBASE_MESSAGING_SENDER_ID',
+  appId: 'FIREBASE_APP_ID',
+  measurementId: 'FIREBASE_MEASUREMENT_ID'
 };
 
 let app;

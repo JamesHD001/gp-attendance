@@ -192,67 +192,52 @@ export function createActionMenu(actions = []) {
   const container = document.createElement('div');
   container.className = 'action-menu';
 
-  const menuBtn = createButton('⋯', null, { className: 'action-menu-btn btn-secondary' });
-  menuBtn.type = 'button';
+  const menuBtn = createButton('⋯', null, { className: 'btn btn-small action-menu-btn btn-secondary' });
   menuBtn.setAttribute('aria-label', 'More actions');
-  menuBtn.setAttribute('aria-haspopup', 'menu');
-  menuBtn.setAttribute('aria-expanded', 'false');
   menuBtn.setAttribute('title', 'More options');
 
   const dropdown = document.createElement('div');
   dropdown.className = 'action-menu-dropdown';
-  dropdown.setAttribute('role', 'menu');
-
-  const updateExpandedState = (isOpen) => {
-    menuBtn.setAttribute('aria-expanded', String(isOpen));
-    dropdown.classList.toggle('show', isOpen);
-  };
-
-  const cleanupListeners = () => {
-    document.removeEventListener('click', handleDocumentClick);
-    document.removeEventListener('keydown', handleEscape);
-  };
 
   const closeDropdown = () => {
-    updateExpandedState(false);
-    cleanupListeners();
+    dropdown.classList.remove('show');
   };
 
-  function handleDocumentClick(event) {
-    if (!container.contains(event.target)) {
+  const handleDocumentClick = (e) => {
+    if (!container.contains(e.target)) {
       closeDropdown();
     }
-  }
+  };
 
-  function handleEscape(event) {
-    if (event.key === 'Escape') {
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
       closeDropdown();
     }
-  }
+  };
 
-  menuBtn.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const isOpen = !dropdown.classList.contains('show');
-    updateExpandedState(isOpen);
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle('show');
 
-    if (isOpen) {
+    if (dropdown.classList.contains('show')) {
       document.addEventListener('click', handleDocumentClick);
       document.addEventListener('keydown', handleEscape);
     } else {
-      cleanupListeners();
+      document.removeEventListener('click', handleDocumentClick);
+      document.removeEventListener('keydown', handleEscape);
     }
   });
 
   actions.forEach(action => {
     const item = document.createElement('button');
-    item.type = 'button';
-    item.setAttribute('role', 'menuitem');
-    item.className = `action-menu-item ${action.className || ''}`.trim();
+    item.className = `action-menu-item ${action.className || ''}`;
     item.textContent = action.label;
 
-    item.addEventListener('click', async (event) => {
-      event.stopPropagation();
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation();
       closeDropdown();
+      document.removeEventListener('click', handleDocumentClick);
+      document.removeEventListener('keydown', handleEscape);
 
       if (action.onClick) {
         await action.onClick();
