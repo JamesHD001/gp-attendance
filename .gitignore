@@ -98,3 +98,5 @@ firestore.debug.log
 # Local generated firebase config (if present)
 js/firebase-config.local.js
 .env.local
+firebase-config.js
+firebase-config.local.js
