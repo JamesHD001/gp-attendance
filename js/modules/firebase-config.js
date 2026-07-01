@@ -15,7 +15,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
 
 // Firebase configuration
-const firebaseConfig = {
+const fallbackFirebaseConfig = {
   apiKey: 'FIREBASE_API_KEY',
   authDomain: 'FIREBASE_AUTH_DOMAIN',
   projectId: 'FIREBASE_PROJECT_ID',
@@ -25,10 +25,20 @@ const firebaseConfig = {
   measurementId: 'FIREBASE_MEASUREMENT_ID'
 };
 
+let firebaseConfig = fallbackFirebaseConfig;
 let app;
 let auth;
 let db;
 let authPersistenceReady = Promise.resolve();
+
+try {
+  const localConfigModule = await import('./firebase-config.local.js');
+  if (localConfigModule?.firebaseConfig) {
+    firebaseConfig = localConfigModule.firebaseConfig;
+  }
+} catch (error) {
+  console.warn('Using fallback Firebase config placeholders because local Firebase config is unavailable.', error);
+}
 
 try {
   app = initializeApp(firebaseConfig);
