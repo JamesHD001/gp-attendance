@@ -86,13 +86,15 @@ export class AuthService {
   }
 
   static getLoginErrorMessage(error) {
+    const firebaseErrorMessage = error?.message || '';
+
     switch (error?.code) {
       case 'auth/invalid-credential':
       case 'auth/invalid-email':
       case 'auth/invalid-login-credentials':
       case 'auth/user-not-found':
       case 'auth/wrong-password':
-        return 'Invalid email or password.';
+        return 'Invalid email or password. Check that the account exists and the password is correct.';
       case 'auth/too-many-requests':
         return 'Too many sign-in attempts. Please wait a moment and try again.';
       case 'auth/network-request-failed':
@@ -103,8 +105,18 @@ export class AuthService {
         return 'Your browser blocked the Google sign-in pop-up. Allow pop-ups and try again.';
       case 'auth/account-exists-with-different-credential':
         return 'An account already exists with this email address. Sign in with your password to link Google.';
+      case 'auth/operation-not-allowed':
+        return 'Email/password sign-in is not enabled for this Firebase project. Please enable the Email/Password provider in Firebase Authentication.';
+      case 'auth/unsupported-persistence-type':
+        return 'This browser cannot keep a session active for sign-in. Try a different browser or refresh the page.';
       default:
-        return 'Login failed. Please try again.';
+        if (firebaseErrorMessage.includes('auth/invalid-credential')) {
+          return 'Invalid email or password. Check that the account exists and the password is correct.';
+        }
+        if (firebaseErrorMessage.includes('API key')) {
+          return 'Firebase authentication is misconfigured. The app is using an invalid Firebase API key.';
+        }
+        return 'Login failed. Please try again. If this keeps happening, confirm that Email/Password sign-in is enabled in Firebase Authentication.';
     }
   }
 
@@ -349,7 +361,10 @@ export class AuthService {
     } catch (error) {
       console.error("Login Error:", error);
       AuthService.clearPendingSessionHydration();
-      throw new Error(AuthService.getLoginErrorMessage(error));
+      const loginError = new Error(AuthService.getLoginErrorMessage(error));
+      loginError.code = error?.code || null;
+      loginError.details = error?.message || null;
+      throw loginError;
     } finally {
       AuthService.isHydratingSession = false;
     }

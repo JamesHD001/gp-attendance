@@ -15,17 +15,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
 
 // Firebase configuration
-const fallbackFirebaseConfig = {
-  apiKey: 'FIREBASE_API_KEY',
-  authDomain: 'FIREBASE_AUTH_DOMAIN',
-  projectId: 'FIREBASE_PROJECT_ID',
-  storageBucket: 'FIREBASE_STORAGE_BUCKET',
-  messagingSenderId: 'FIREBASE_MESSAGING_SENDER_ID',
-  appId: 'FIREBASE_APP_ID',
-  measurementId: 'FIREBASE_MEASUREMENT_ID'
-};
-
-let firebaseConfig = fallbackFirebaseConfig;
+let firebaseConfig = null;
 let app;
 let auth;
 let db;
@@ -37,7 +27,11 @@ try {
     firebaseConfig = localConfigModule.firebaseConfig;
   }
 } catch (error) {
-  console.warn('Using fallback Firebase config placeholders because local Firebase config is unavailable.', error);
+  console.warn('Local Firebase config is unavailable. Make sure js/modules/firebase-config.local.js exists.', error);
+}
+
+if (!firebaseConfig || firebaseConfig.apiKey?.includes('FIREBASE_')) {
+  throw new Error('Firebase configuration is missing or still uses placeholder values. Generate js/modules/firebase-config.local.js with your real Firebase project settings.');
 }
 
 try {
