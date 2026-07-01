@@ -1,5 +1,6 @@
 export const NIGERIA_TIME_ZONE = 'Africa/Lagos';
-export const INSTRUCTOR_ATTENDANCE_LOCK_HOUR = 16;
+export const INSTRUCTOR_ATTENDANCE_LOCK_HOUR = 18; // 4:00 PM Nigerian time (UTC+1) in 24-hour format
+export const INSTRUCTOR_ATTENDANCE_LOCK_MINUTE = 30;
 
 const MS_PER_MINUTE = 60 * 1000;
 
@@ -78,10 +79,11 @@ export function getInstructorAttendanceLockState(now = new Date()) {
     currentDateLabel: parts.dateLabel,
     currentTimeLabel: parts.timeLabel,
     cutoffHour: INSTRUCTOR_ATTENDANCE_LOCK_HOUR,
-    cutoffLabel: `4:00 PM ${NIGERIA_TIME_ZONE}`,
+    cutoffMinute: INSTRUCTOR_ATTENDANCE_LOCK_MINUTE,
+    cutoffLabel: `6:30 PM ${NIGERIA_TIME_ZONE}`,
     statusMessage: isLocked
-      ? `Attendance is locked for ${parts.dateLabel}. Instructors cannot mark or change attendance after 4:00 PM Nigerian time.`
-      : `Attendance for ${parts.dateLabel} will lock automatically at 4:00 PM Nigerian time.`
+      ? `Attendance is locked for ${parts.dateLabel}. Instructors cannot mark or change attendance after 6:30 PM Nigerian time.`
+      : `Attendance for ${parts.dateLabel} will lock automatically at 6:30 PM Nigerian time.`
   };
 }
 
@@ -91,5 +93,5 @@ export function getMillisecondsUntilNextMinute(now = new Date()) {
 
 export function buildInstructorAttendanceLockError(now = new Date()) {
   const state = getInstructorAttendanceLockState(now);
-  return new Error(`Attendance is locked for today after 4:00 PM ${NIGERIA_TIME_ZONE}. Current Nigeria time: ${state.currentTimeLabel}.`);
+  return new Error(`Attendance is locked for today after 6:30 PM ${NIGERIA_TIME_ZONE}. Current Nigeria time: ${state.currentTimeLabel}.`);
 }

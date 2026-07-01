@@ -1,18 +1,17 @@
-import { db } from '../firebase-config.js';
 import { AuthService } from './auth.js';
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js";
 import {
   getStudentsByClass, addStudent, deleteStudent, updateStudent,
   getSessionsByClass, createSession, deleteSession,
   getAttendanceBySession, getClassById,
   getPerformanceRatingsByClass, savePerformanceRating, getStudentMembershipType,
-  updateAttendance, getNextClassDates, calculateAttendanceStats, calculateGraduationStats
+  updateAttendance, getNextClassDates, calculateAttendanceStats, calculateGraduationStats,
+  getUserData
 } from './firestore.js';
 import {
   formatDate, createTable, createTableSkeleton,
   clearElement, showNotification, createModal, createButton, createInput, createSelect, createTabSkeleton
 } from './ui-utils.js';
-import { createStudentsSkeleton, createAttendanceSkeleton, createPerformanceSkeleton, createGraduationSkeleton, createAnalyticsSkeleton } from './ui-utils.js';
+import { createStudentsSkeleton, createAttendanceSkeleton, createPerformanceSkeleton, createAnalyticsSkeleton } from './ui-utils.js';
 import { Timestamp } from 'https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore.js';
 import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
@@ -174,9 +173,16 @@ export class InstructorDashboard {
   }
 
   async loadInstructorData() {
-    const userDoc = await getDoc(doc(db, "users", this.currentUser.uid));
-    this.userData = userDoc.data() || {};
-    // FIX Bug 5: prefer assignedClassId, fall back for legacy docs
+    const profile = await getUserData(this.currentUser.uid);
+    this.userData = profile || {
+      name: this.currentUser?.displayName || 'Instructor',
+      email: this.currentUser?.email || '',
+      role: 'instructor',
+      assignedClassId: null,
+      phoneNumber: '',
+      address: ''
+    };
+
     this.assignedClass = this.userData.assignedClassId || this.userData.assignedClass || null;
     if (this.assignedClass) {
       const classDoc = await getClassById(this.assignedClass);
@@ -268,7 +274,8 @@ export class InstructorDashboard {
       attendance: 'attendance',
       performance: 'performance',
       graduation: 'graduation',
-      analytics: 'stats'
+      analytics: 'stats',
+      settings: 'settings'
     };
     return map[key] || '';
   }
@@ -294,10 +301,13 @@ export class InstructorDashboard {
       if (tabName === 'students') skeletonEl = createStudentsSkeleton();
       else if (tabName === 'attendance') skeletonEl = createAttendanceSkeleton();
       else if (tabName === 'performance') skeletonEl = createPerformanceSkeleton();
-      else if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
       else if (tabName === 'stats') skeletonEl = createAnalyticsSkeleton();
+      else if (tabName === 'settings') skeletonEl = createTabSkeleton({ statsCount: 1, tableRows: 3, tableColumns: 2, showQuote: false });
+      else if (tabName === 'graduation') skeletonEl = null;
 
-      targetTabEl.appendChild(skeletonEl);
+      if (skeletonEl) {
+        targetTabEl.appendChild(skeletonEl);
+      }
       targetTabEl.classList.remove('hidden');
     }
 
@@ -307,6 +317,7 @@ export class InstructorDashboard {
     else if (tabName === 'performance') this.renderPerformanceTab();
     else if (tabName === 'graduation') this.renderGraduationTab();
     else if (tabName === 'stats') this.renderStatsTab();
+    else if (tabName === 'settings') this.renderSettingsTab();
   }
 
   /* ---- OVERVIEW TAB ---- */
@@ -966,6 +977,19 @@ export class InstructorDashboard {
       isDemoMode: this.isDemoMode,
       emptyStateMessage: 'Graduation readiness loads only for authenticated instructors assigned to a real class.',
       noClassMessage: 'No class is assigned to this instructor yet, so graduation readiness cannot be calculated.'
+    });
+  }
+
+  async renderSettingsTab() {
+    const tab = document.getElementById('settingsTab');
+    await renderSharedSettingsTab(tab, {
+      currentUser: this.currentUser,
+      profile: this.userData,
+      isLoading: this.isLoading,
+      isDemoMode: this.isDemoMode,
+      onProfileUpdated: (profile) => {
+        this.userData = profile;
+      }
     });
   }
 }

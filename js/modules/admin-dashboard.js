@@ -19,7 +19,7 @@ import {
   createStatCard, createButton, createInput, createSelect,
   createModal, createStatsSkeleton, createTableSkeleton, createTabSkeleton
 } from './ui-utils.js';
-import { createClassesSkeleton, createUsersSkeleton, createStudentsSkeleton, createAttendanceSkeleton, createAnalyticsSkeleton, createGraduationSkeleton } from './ui-utils.js';
+import { createClassesSkeleton, createUsersSkeleton, createStudentsSkeleton, createAttendanceSkeleton, createAnalyticsSkeleton } from './ui-utils.js';
 import { formatDate } from './ui-utils.js';
 import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
@@ -484,8 +484,8 @@ export class AdminDashboard {
       if (tabName === 'users') skeletonEl = createUsersSkeleton();
       if (tabName === 'students') skeletonEl = createStudentsSkeleton();
       if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
-      if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
-      targetTabEl.appendChild(skeletonEl);
+      if (tabName === 'graduation') skeletonEl = null;
+      if (skeletonEl) targetTabEl.appendChild(skeletonEl);
       targetTabEl.classList.remove('hidden');
     }
     this.syncSidebarNavigation(tabName);

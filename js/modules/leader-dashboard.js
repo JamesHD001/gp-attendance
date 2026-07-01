@@ -6,7 +6,8 @@ import {
   getStudentsByClass,
   getSessionsByClass,
   getAttendanceBySession,
-  calculateGraduationStats
+  calculateGraduationStats,
+  getUserData
 } from './firestore.js';
 
 import { AuthService } from './auth.js';
@@ -28,13 +29,15 @@ import {
 import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
 import { renderGraduationTab } from './graduation-utils.js';
 import { createTabSkeleton } from './ui-utils.js';
-import { createClassesSkeleton, createReportsSkeleton, createAnalyticsSkeleton, createGraduationSkeleton, createGraduandsSkeleton } from './ui-utils.js';
+import { createClassesSkeleton, createReportsSkeleton, createAnalyticsSkeleton, createGraduandsSkeleton } from './ui-utils.js';
+import { renderSettingsTab as renderSharedSettingsTab } from './shared-settings.js';
 import { showClassParticipantsModal } from './class-participants.js';
 
 export class LeaderDashboard {
 
   constructor() {
     this.currentUser = null;
+    this.userData = null;
     this.classes = [];
     this.quoteIntervalRef = { current: null };
     this.isDemoMode = false;
@@ -51,6 +54,13 @@ export class LeaderDashboard {
     if (isLocal) {
       this.isDemoMode = true;
       this.currentUser = AuthService.getCurrentUser();
+      this.userData = {
+        name: this.currentUser?.displayName || 'Local Leader',
+        email: this.currentUser?.email || 'leader@example.test',
+        role: 'leader',
+        phoneNumber: '',
+        address: ''
+      };
       this.renderDashboard();
       this.attachFreshEventListeners();
       try {
@@ -80,6 +90,7 @@ export class LeaderDashboard {
       this.renderDashboard();
       this.attachFreshEventListeners();
       try {
+        await this.loadUserData();
         await this.loadClasses();
       } finally {
         this.isLoading = false;
@@ -136,7 +147,7 @@ export class LeaderDashboard {
 
     window.addEventListener('hashchange', () => {
       const hash = location.hash.replace('#', '');
-      const map = { overview: 'overview', classes: 'classes', reports: 'reports', analytics: 'analytics', graduation: 'graduation', graduands: 'graduands' };
+      const map = { overview: 'overview', classes: 'classes', reports: 'reports', analytics: 'analytics', graduation: 'graduation', graduands: 'graduands', settings: 'settings' };
       const tabName = map[hash] || hash;
       if (tabName) this.switchTab(tabName, null);
     });
@@ -153,7 +164,8 @@ export class LeaderDashboard {
       reports: 'reports',
       analytics: 'analytics',
       graduation: 'graduation',
-      graduands: 'graduands'
+      graduands: 'graduands',
+      settings: 'settings'
     };
     return map[key] || '';
   }
@@ -179,15 +191,17 @@ export class LeaderDashboard {
       if (tabName === 'classes') skeletonEl = createClassesSkeleton();
       if (tabName === 'reports') skeletonEl = createReportsSkeleton();
       if (tabName === 'analytics') skeletonEl = createAnalyticsSkeleton();
-      if (tabName === 'graduation') skeletonEl = createGraduationSkeleton();
+      if (tabName === 'settings') skeletonEl = createTabSkeleton({ statsCount: 1, tableRows: 3, tableColumns: 2, showQuote: false });
+      if (tabName === 'graduation') skeletonEl = null;
       if (tabName === 'graduands') skeletonEl = createGraduandsSkeleton();
-      targetTabEl.appendChild(skeletonEl);
+      if (skeletonEl) targetTabEl.appendChild(skeletonEl);
       targetTabEl.classList.remove('hidden');
     }
 
     if (tabName === 'classes') this.renderClassesTab();
     if (tabName === 'reports')   this.renderReportsTab();
     if (tabName === 'analytics') this.renderAnalyticsTab();
+    if (tabName === 'settings') this.renderSettingsTab();
     if (tabName === 'graduation') this.renderGraduationTab();
     if (tabName === 'graduands') this.renderGraduandsTab();
   }
@@ -345,6 +359,7 @@ export class LeaderDashboard {
       <div id="analyticsTab" class="tab-content hidden"></div>
       <div id="graduationTab" class="tab-content hidden"></div>
       <div id="graduandsTab" class="tab-content hidden"></div>
+      <div id="settingsTab" class="tab-content hidden"></div>
     `;
     mainContent.appendChild(tabContent);
 
@@ -496,6 +511,42 @@ export class LeaderDashboard {
       leaderView: true,
       potentialThreshold: 70,
       emptyStateMessage: 'Graduation readiness is available after signing in as an authenticated leader.'
+    });
+  }
+
+  async loadUserData() {
+    if (!this.currentUser?.uid) return;
+    try {
+      const profile = await getUserData(this.currentUser.uid);
+      this.userData = profile || {
+        name: this.currentUser.displayName || '',
+        email: this.currentUser.email || '',
+        role: 'leader',
+        phoneNumber: '',
+        address: ''
+      };
+    } catch (error) {
+      console.warn('Failed to load leader profile data:', error);
+      this.userData = {
+        name: this.currentUser?.displayName || '',
+        email: this.currentUser?.email || '',
+        role: 'leader',
+        phoneNumber: '',
+        address: ''
+      };
+    }
+  }
+
+  async renderSettingsTab() {
+    const tab = document.getElementById('settingsTab');
+    await renderSharedSettingsTab(tab, {
+      currentUser: this.currentUser,
+      profile: this.userData,
+      isLoading: this.isLoading,
+      isDemoMode: this.isDemoMode,
+      onProfileUpdated: (profile) => {
+        this.userData = profile;
+      }
     });
   }
 }
