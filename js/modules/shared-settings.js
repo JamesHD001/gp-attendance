@@ -48,6 +48,18 @@ function createSettingsCard(title) {
   return { card, body };
 }
 
+function createSettingsField(label, input) {
+  const group = document.createElement('div');
+  group.className = 'settings-field';
+
+  const labelEl = document.createElement('label');
+  labelEl.textContent = label;
+  labelEl.setAttribute('for', input.id || '');
+
+  group.append(labelEl, input);
+  return group;
+}
+
 async function saveProfileUpdate(options, nextProfile) {
   const { currentUser, isDemoMode = false, onProfileUpdated } = options;
 
@@ -128,7 +140,11 @@ export async function renderSettingsTab(targetTab, options = {}) {
   const phoneInput = createInput('text', 'Phone number', 'settingsPhone', { value: profileSnapshot.phoneNumber });
   const addressInput = createInput('text', 'Address', 'settingsAddress', { value: profileSnapshot.address });
 
-  profileForm.append(nameInput, phoneInput, addressInput);
+  profileForm.append(
+    createSettingsField('Full name', nameInput),
+    createSettingsField('Phone number', phoneInput),
+    createSettingsField('Address', addressInput)
+  );
 
   const profileActions = document.createElement('div');
   profileActions.className = 'settings-actions';
@@ -182,7 +198,7 @@ export async function renderSettingsTab(targetTab, options = {}) {
   emailForm.className = 'settings-form';
 
   const emailInput = createInput('email', 'Email address', 'settingsEmail', { value: profileSnapshot.email });
-  emailForm.append(emailInput);
+  emailForm.append(createSettingsField('Email address', emailInput));
 
   const currentPasswordInput = AuthService.hasPasswordProvider(currentUser)
     ? createInput('password', 'Current password', 'settingsCurrentPassword')
@@ -268,7 +284,11 @@ export async function renderSettingsTab(targetTab, options = {}) {
     const newPassword = createInput('password', 'New password', 'settingsPasswordNew');
     const confirmPassword = createInput('password', 'Confirm new password', 'settingsPasswordConfirm');
 
-    passwordForm.append(currentPassword, newPassword, confirmPassword);
+    passwordForm.append(
+      createSettingsField('Current password', currentPassword),
+      createSettingsField('New password', newPassword),
+      createSettingsField('Confirm new password', confirmPassword)
+    );
 
     const securityActions = document.createElement('div');
     securityActions.className = 'settings-actions';

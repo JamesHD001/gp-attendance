@@ -940,6 +940,78 @@ textarea {
   border-bottom: none;
 }
 
+/* ===== SETTINGS ===== */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.settings-card {
+  height: fit-content;
+}
+
+.settings-card .card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.settings-meta {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--surface-muted);
+}
+
+.settings-meta-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  color: var(--text-dark);
+}
+
+.settings-meta-label {
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.settings-field label {
+  margin-bottom: 0;
+  font-size: 13px;
+  color: var(--text-light);
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.settings-status {
+  font-weight: 600;
+  color: var(--primary-blue);
+}
+
+.settings-theme-button {
+  align-self: flex-start;
+}
+
 /* ===== CARDS ===== */
 
 .card {
