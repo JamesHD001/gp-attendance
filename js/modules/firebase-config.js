@@ -25,6 +25,11 @@ const firebaseConfig = {
   measurementId: 'G-62NCJBYJ36'
 };
 
+let app = null;
+let auth = null;
+let db = null;
+let authPersistenceReady = Promise.resolve();
+
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
