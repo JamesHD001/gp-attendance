@@ -223,9 +223,15 @@ export async function renderSettingsTab(targetTab, options = {}) {
 
   const saveEmailBtn = createButton('Update email', async () => {
     const nextEmail = String(emailInput.value || '').trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!nextEmail) {
       showNotification('Email address is required', 'warning');
+      return;
+    }
+
+    if (!emailRegex.test(nextEmail)) {
+      showNotification('Please enter a valid email address', 'warning');
       return;
     }
 
