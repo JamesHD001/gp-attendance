@@ -22,6 +22,7 @@ import {
 import { createClassesSkeleton, createUsersSkeleton, createStudentsSkeleton, createAttendanceSkeleton, createAnalyticsSkeleton } from './ui-utils.js';
 import { formatDate } from './ui-utils.js';
 import { renderAnalyticsTab, createMotivationCard } from './analytics-utils.js';
+import { renderSettingsTab as renderSharedSettingsTab } from './shared-settings.js';
 import { renderGraduationTab } from './graduation-utils.js';
 import { showClassParticipantsModal } from './class-participants.js';
 
@@ -964,144 +965,18 @@ export class AdminDashboard {
 
   async renderSettingsTab() {
     const tab = document.getElementById('settingsTab');
-    clearElement(tab);
-
-    const header = document.createElement('div');
-    header.className = 'flex-between mb-lg';
-    header.innerHTML = `
-      <div>
-        <h2>Settings</h2>
-        <p class="text-muted">Update your name and contact details. Password and verification tools will be added later.</p>
-      </div>
-    `;
-    tab.appendChild(header);
-
-    if (this.isLoading) {
-      tab.appendChild(createTabSkeleton({ statsCount: 1, tableRows: 3, tableColumns: 2, showQuote: false }));
-      return;
-    }
-
-    const profile = this.currentUserProfile || this.users.find(user => user.id === this.currentUser?.uid) || {
-      name: this.currentUser?.displayName || '',
-      email: this.currentUser?.email || '',
-      phoneNumber: '',
-      address: ''
-    };
-
-    const settingsCard = document.createElement('div');
-    settingsCard.className = 'card';
-    settingsCard.innerHTML = '<div class="card-header">Profile Settings</div>';
-
-    const body = document.createElement('div');
-    body.className = 'card-body';
-
-    const note = document.createElement('p');
-    note.className = 'text-muted';
-    note.textContent = 'Use the same email you want tied to this admin account. Some email changes may require a fresh sign-in before Firebase allows the update.';
-    body.appendChild(note);
-
-    const roleText = document.createElement('p');
-    roleText.className = 'text-muted';
-    roleText.textContent = `Role: ${profile.role || 'admin'}`;
-    body.appendChild(roleText);
-
-    const form = document.createElement('div');
-    form.style.display = 'flex';
-    form.style.flexDirection = 'column';
-    form.style.gap = '0.75rem';
-    form.style.maxWidth = '640px';
-
-    const nameInput = createInput('text', 'Full name', 'settingsName', { value: profile.name || '' });
-    const emailInput = createInput('email', 'Email address', 'settingsEmail', { value: profile.email || this.currentUser?.email || '' });
-    const phoneInput = createInput('text', 'Phone number', 'settingsPhone', { value: profile.phoneNumber || '' });
-    const addressInput = createInput('text', 'Address', 'settingsAddress', { value: profile.address || '' });
-
-    form.append(nameInput, emailInput, phoneInput, addressInput);
-    body.appendChild(form);
-
-    const actionRow = document.createElement('div');
-    actionRow.className = 'flex gap-md mt-lg';
-    actionRow.style.flexWrap = 'wrap';
-
-    const saveBtn = createButton('Save Changes', async () => {
-      const nextName = (nameInput.value || '').trim();
-      const nextEmail = (emailInput.value || '').trim();
-      const nextPhone = (phoneInput.value || '').trim();
-      const nextAddress = (addressInput.value || '').trim();
-
-      if (!nextName || !nextEmail) {
-        showNotification('Name and email are required', 'warning');
-        return;
+    await renderSharedSettingsTab(tab, {
+      title: 'Settings',
+      description: 'Manage your profile, email, appearance, and password from one place.',
+      currentUser: this.currentUser,
+      profile: this.currentUserProfile,
+      isLoading: this.isLoading,
+      isDemoMode: this.isDemoMode,
+      onProfileUpdated: async (nextProfile) => {
+        this.currentUserProfile = nextProfile;
+        try { await this.loadCurrentUserProfile?.(); } catch (e) { /* ignore */ }
       }
-
-      if (!this.currentUser?.uid) {
-        showNotification('Unable to identify the current user', 'error');
-        return;
-      }
-
-      saveBtn.disabled = true;
-      let notificationType = 'success';
-      let notificationMessage = 'Settings updated successfully';
-
-      try {
-        if (this.isDemoMode) {
-          this.currentUserProfile = {
-            ...profile,
-            name: nextName,
-            email: nextEmail,
-            phoneNumber: nextPhone,
-            address: nextAddress
-          };
-          this.renderSettingsTab();
-          showNotification('Settings updated in local demo mode', 'success');
-          return;
-        }
-
-        const updates = {
-          name: nextName,
-          phoneNumber: nextPhone,
-          address: nextAddress
-        };
-
-        const currentEmail = profile.email || this.currentUser?.email || '';
-        if (nextEmail !== currentEmail) {
-          try {
-            if (auth.currentUser) {
-              await updateAuthEmail(auth.currentUser, nextEmail);
-            }
-            updates.email = nextEmail;
-          } catch (error) {
-            if (error?.code === 'auth/requires-recent-login') {
-              notificationType = 'warning';
-              notificationMessage = 'Name and contact details were saved, but email changes require you to log out and sign in again before retrying.';
-            } else if (error?.code === 'auth/invalid-email') {
-              throw new Error('Please enter a valid email address.');
-            } else if (error?.code === 'auth/email-already-in-use') {
-              throw new Error('That email address is already in use.');
-            } else {
-              throw error;
-            }
-          }
-        } else {
-          updates.email = nextEmail;
-        }
-
-        await updateUser(this.currentUser.uid, updates);
-        await Promise.all([this.loadUsers(), this.loadCurrentUserProfile()]);
-        this.renderSettingsTab();
-        showNotification(notificationMessage, notificationType);
-      } catch (error) {
-        console.error('Failed to update settings', error);
-        showNotification(error?.message || 'Failed to update settings', 'error');
-      } finally {
-        saveBtn.disabled = false;
-      }
-    }, { className: 'btn-primary' });
-
-    actionRow.appendChild(saveBtn);
-    body.appendChild(actionRow);
-    settingsCard.appendChild(body);
-    tab.appendChild(settingsCard);
+    });
   }
 
   async renderUsersTab() {
