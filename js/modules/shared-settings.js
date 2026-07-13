@@ -1,5 +1,5 @@
 import { AuthService } from './auth.js';
-import { updateUser } from './firestore.js';
+import { updateUser, getAllUsers } from './firestore.js';
 import { getThemePreference, toggleTheme } from './theme.js';
 import {
   clearElement,
@@ -164,6 +164,16 @@ export async function renderSettingsTab(targetTab, options = {}) {
       return;
     }
 
+    // Validate phone number format if provided
+    if (nextPhone) {
+      const phoneNormalized = String(nextPhone).trim();
+      const phoneRegex = /^\+?[0-9 \-()]{7,20}$/;
+      if (!phoneRegex.test(phoneNormalized)) {
+        showNotification('Please enter a valid phone number (digits, spaces, +, - allowed)', 'warning');
+        return;
+      }
+    }
+
     saveProfileBtn.disabled = true;
 
     try {
@@ -229,9 +239,19 @@ export async function renderSettingsTab(targetTab, options = {}) {
       return;
     }
 
+    // Prevent duplicate email addresses (check users collection)
     saveEmailBtn.disabled = true;
-
     try {
+      if (!isDemoMode) {
+        const users = await getAllUsers();
+        const existing = users.find(u => String(u.email || '').toLowerCase() === nextEmail.toLowerCase() && u.id !== currentUser.uid);
+        if (existing) {
+          showNotification('That email address is already in use by another account', 'warning');
+          saveEmailBtn.disabled = false;
+          return;
+        }
+      }
+
       await saveEmailUpdate(options, nextEmail, currentPasswordInput?.value || '');
       showNotification(isDemoMode ? 'Email updated in local demo mode' : 'Email updated successfully', 'success');
     } catch (error) {
@@ -303,15 +323,23 @@ export async function renderSettingsTab(targetTab, options = {}) {
         return;
       }
 
-      if (nextPasswordValue.length < 6) {
-        showNotification('New password must be at least 6 characters long', 'warning');
-        return;
-      }
+        if (nextPasswordValue !== confirmPasswordValue) {
+          showNotification('New password and confirmation do not match', 'warning');
+          return;
+        }
 
-      if (nextPasswordValue !== confirmPasswordValue) {
-        showNotification('New password and confirmation do not match', 'warning');
-        return;
-      }
+        // Password strength validation
+        const pwErrors = [];
+        if (nextPasswordValue.length < 8) pwErrors.push('at least 8 characters');
+        if (!/[a-z]/.test(nextPasswordValue)) pwErrors.push('a lowercase letter');
+        if (!/[A-Z]/.test(nextPasswordValue)) pwErrors.push('an uppercase letter');
+        if (!/[0-9]/.test(nextPasswordValue)) pwErrors.push('a number');
+        if (!/[!@#$%^&*()_+\-=[\]{};:\"\\|,.<>/?]/.test(nextPasswordValue)) pwErrors.push('a symbol (e.g. !@#$)');
+
+        if (pwErrors.length > 0) {
+          showNotification('Password must include ' + pwErrors.join(', '), 'warning');
+          return;
+        }
 
       updatePasswordBtn.disabled = true;
 
