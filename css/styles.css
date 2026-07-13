@@ -164,7 +164,7 @@ a:hover {
 .page-wrapper {
   display: flex;
   min-height: 100vh;
-  background-color: var(--light-gray);
+  background-color: var(--page-bg);
 }
 
 .sidebar {
@@ -528,12 +528,12 @@ a:hover {
 }
 
 .nav-link:hover {
-  background-color: var(--light-gray);
+  background-color: var(--surface-muted);
   border-left-color: var(--primary-blue);
 }
 
 .nav-link.active {
-  background-color: var(--light-gray);
+  background-color: var(--surface-muted);
   border-left-color: var(--primary-blue);
   color: var(--primary-blue);
   font-weight: 600;
@@ -578,13 +578,13 @@ a:hover {
 }
 
 .nav-sublink:hover {
-  background-color: var(--light-gray);
+  background-color: var(--surface-muted);
   color: var(--primary-blue);
   text-decoration: none;
 }
 
 .nav-sublink.active {
-  background-color: var(--light-gray);
+  background-color: var(--surface-muted);
   color: var(--primary-blue);
   font-weight: 600;
 }
@@ -608,7 +608,7 @@ a:hover {
 }
 
 .sidebar-nav-action:hover {
-  background-color: var(--light-gray);
+  background-color: var(--surface-muted);
   border-left-color: var(--primary-blue);
   color: var(--primary-blue);
 }
@@ -641,7 +641,7 @@ button, .btn {
 }
 
 .btn-secondary {
-  background-color: var(--light-gray);
+  background-color: var(--surface-muted);
   color: var(--text-dark);
   border-color: var(--border-color);
 }
