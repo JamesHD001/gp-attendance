@@ -310,9 +310,56 @@ export async function renderSettingsTab(targetTab, options = {}) {
     const newPassword = createInput('password', 'New password', 'settingsPasswordNew');
     const confirmPassword = createInput('password', 'Confirm new password', 'settingsPasswordConfirm');
 
+    const passwordStrengthMeter = document.createElement('div');
+    passwordStrengthMeter.className = 'password-strength-meter';
+    passwordStrengthMeter.innerHTML = `
+      <div class="password-strength-bar"><span></span></div>
+      <div class="password-strength-label">Enter a password to check strength.</div>
+    `;
+
+    const strengthFill = passwordStrengthMeter.querySelector('span');
+    const strengthLabel = passwordStrengthMeter.querySelector('.password-strength-label');
+
+    const getPasswordStrengthInfo = (value) => {
+      const trimmed = String(value || '');
+      if (!trimmed) {
+        return { score: 0, label: 'Enter a password to check strength.', color: 'var(--border-color)' };
+      }
+
+      let score = 0;
+      if (trimmed.length >= 8) score += 1;
+      if (trimmed.length >= 12) score += 1;
+      if (/[a-z]/.test(trimmed)) score += 1;
+      if (/[A-Z]/.test(trimmed)) score += 1;
+      if (/[0-9]/.test(trimmed)) score += 1;
+      if (/[!@#$%^&*()_+\-=[\]{};:\"\\|,.<>/?]/.test(trimmed)) score += 1;
+
+      if (score <= 2) {
+        return { score, label: 'Weak password', color: 'var(--danger-red)' };
+      }
+      if (score <= 4) {
+        return { score, label: 'Fair password', color: 'var(--warning-orange)' };
+      }
+      if (score === 5) {
+        return { score, label: 'Strong password', color: 'var(--success-green)' };
+      }
+      return { score, label: 'Very strong password', color: 'var(--primary-blue)' };
+    };
+
+    const updatePasswordStrength = () => {
+      const { score, label, color } = getPasswordStrengthInfo(newPassword.value);
+      const percent = score > 0 ? Math.round((score / 6) * 100) : 4;
+      strengthFill.style.width = `${percent}%`;
+      strengthFill.style.backgroundColor = color;
+      strengthLabel.textContent = label;
+    };
+
+    newPassword.addEventListener('input', updatePasswordStrength);
+
     passwordForm.append(
       createSettingsField('Current password', currentPassword),
       createSettingsField('New password', newPassword),
+      passwordStrengthMeter,
       createSettingsField('Confirm new password', confirmPassword)
     );
 
