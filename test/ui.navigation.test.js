@@ -81,6 +81,18 @@ async function testPage(url) {
       return false;
     }
 
+    if (url.includes('leader-dashboard.html') && href.includes('reports')) {
+      const reportCards = await page.$$eval('#reportsTab .stat-card', els => els.length)
+        .catch(() => 0);
+      const classSelect = await page.$('#reportClassSelect').catch(() => null);
+
+      if (reportCards === 0 || classSelect) {
+        console.error(`Leader reports tab did not render the consolidated summary on ${url}`);
+        await browser.close();
+        return false;
+      }
+    }
+
     console.log(`Clicked ${href} OK`);
   }
 

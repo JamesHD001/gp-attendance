@@ -7,7 +7,8 @@ import {
   getSessionsByClass,
   getAttendanceBySession,
   calculateGraduationStats,
-  getUserData
+  getUserData,
+  getGatheringPlaceStats
 } from './firestore.js';
 
 import { AuthService } from './auth.js';
@@ -412,19 +413,17 @@ export class LeaderDashboard {
     const header = document.createElement('div');
     header.className = 'flex-between mb-lg';
     header.innerHTML = `
-      <h2>Attendance Reports</h2>
+      <div>
+        <h2>Program-wide Attendance Report</h2>
+        <p class="text-muted">A consolidated overview of attendance across all classes for leaders and coordinators.</p>
+      </div>
       <button id="printReportBtn" class="btn btn-secondary">Print</button>
     `;
     tab.appendChild(header);
 
-    const classSelect = createSelect(
-      [{ label: 'Select Class...', value: '' }, ...this.classes.map(c => ({ label: c.name, value: c.id }))],
-      'reportClassSelect'
-    );
-    tab.appendChild(classSelect);
-
     const reportsContainer = document.createElement('div');
     reportsContainer.id = 'reportsContainer';
+    reportsContainer.className = 'analytics-container';
     tab.appendChild(reportsContainer);
 
     if (this.isLoading) {
@@ -432,64 +431,128 @@ export class LeaderDashboard {
       return;
     }
 
-    classSelect.addEventListener('change', async (e) => {
-      const classId = e.target.value;
-      if (!classId) return;
-      await this.loadAndRenderReports(classId, reportsContainer);
-    });
+    const printButton = document.getElementById('printReportBtn');
+    printButton?.addEventListener('click', () => triggerPrint());
 
-    document.getElementById('printReportBtn').addEventListener('click', () => triggerPrint());
-  }
+    const summaryGrid = document.createElement('div');
+    summaryGrid.className = 'stats-grid mb-lg';
+    reportsContainer.appendChild(summaryGrid);
 
-  async loadAndRenderReports(classId, container) {
-    clearElement(container);
-    const sessions = await getSessionsByClass(classId);
+    const breakdownCard = document.createElement('div');
+    breakdownCard.className = 'card';
+    const breakdownHeader = document.createElement('div');
+    breakdownHeader.className = 'card-header';
+    breakdownHeader.textContent = 'Attendance Summary by Class';
+    breakdownCard.appendChild(breakdownHeader);
 
-    if (!sessions.length) {
-      container.innerHTML = '<p class="text-muted">No sessions recorded.</p>';
-      return;
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    breakdownCard.appendChild(body);
+    reportsContainer.appendChild(breakdownCard);
+
+    const renderSummary = (summaryData = {}) => {
+      clearElement(summaryGrid);
+      const cards = [
+        { label: 'Total Classes', value: summaryData.totalClasses ?? this.classes.length },
+        { label: 'Total Students', value: summaryData.totalStudents ?? 0 },
+        { label: 'Total Attendance Records', value: summaryData.totalRecords ?? 0 },
+        { label: 'Overall Attendance Rate', value: `${summaryData.overallRate ?? 0}%` },
+        { label: 'Present Records', value: summaryData.presentRecords ?? 0 },
+        { label: 'Absent Records', value: summaryData.absentRecords ?? 0 },
+        { label: 'Total Sessions', value: summaryData.totalSessions ?? 0 }
+      ];
+
+      cards.forEach(({ label, value }) => summaryGrid.appendChild(createStatCard(label, value)));
+    };
+
+    const renderBreakdown = (classSummaries = []) => {
+      clearElement(body);
+      body.appendChild(createTable(
+        ['Class', 'Students', 'Sessions', 'Overall Rate', 'Latest Session Rate'],
+        classSummaries.map(item => ({
+          Class: item.className,
+          Students: item.totalStudents,
+          Sessions: item.totalSessions,
+          'Overall Rate': `${item.overallRate}%`,
+          'Latest Session Rate': `${item.latestRate}%`
+        }))
+      ));
+    };
+
+    try {
+      const classSummaries = await Promise.all(this.classes.map(async (classRecord) => {
+        const [students, sessions] = await Promise.all([
+          getStudentsByClass(classRecord.id),
+          getSessionsByClass(classRecord.id)
+        ]);
+
+        if (!sessions.length) {
+          return {
+            className: classRecord.name,
+            totalStudents: students.length,
+            totalSessions: 0,
+            overallRate: 0,
+            latestRate: 0
+          };
+        }
+
+        const latestSession = [...sessions].sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+        const latestAttendance = latestSession ? await getAttendanceBySession(latestSession.id) : [];
+        const latestPresent = latestAttendance.filter(record => record.status === 'present').length;
+        const latestTotal = latestAttendance.length;
+        const latestRate = latestTotal === 0 ? 0 : Math.round((latestPresent / latestTotal) * 100);
+
+        const attendanceResults = await Promise.all(sessions.map(session => getAttendanceBySession(session.id)));
+        const combinedRecords = attendanceResults.flat();
+        const present = combinedRecords.filter(record => record.status === 'present').length;
+        const totalRecords = combinedRecords.length;
+        const overallRate = totalRecords === 0 ? 0 : Math.round((present / totalRecords) * 100);
+
+        return {
+          className: classRecord.name,
+          totalStudents: students.length,
+          totalSessions: sessions.length,
+          overallRate,
+          latestRate,
+          totalRecords,
+          presentRecords: present,
+          absentRecords: totalRecords - present
+        };
+      }));
+
+      const totalStudents = classSummaries.reduce((sum, item) => sum + (item.totalStudents || 0), 0);
+      const totalSessions = classSummaries.reduce((sum, item) => sum + (item.totalSessions || 0), 0);
+      const totalRecords = classSummaries.reduce((sum, item) => sum + (item.totalRecords || 0), 0);
+      const presentRecords = classSummaries.reduce((sum, item) => sum + (item.presentRecords || 0), 0);
+      const absentRecords = classSummaries.reduce((sum, item) => sum + (item.absentRecords || 0), 0);
+      const overallRate = totalRecords === 0 ? 0 : Math.round((presentRecords / totalRecords) * 100);
+      const latestSessionAverage = classSummaries.length === 0
+        ? 0
+        : Math.round(classSummaries.reduce((sum, item) => sum + (item.latestRate || 0), 0) / classSummaries.length);
+
+      renderSummary({
+        totalClasses: this.classes.length,
+        totalStudents,
+        totalSessions,
+        totalRecords,
+        presentRecords,
+        absentRecords,
+        overallRate,
+        latestSessionAverage
+      });
+      renderBreakdown(classSummaries.map(item => ({
+        className: item.className,
+        totalStudents: item.totalStudents,
+        totalSessions: item.totalSessions,
+        overallRate: item.overallRate,
+        latestRate: item.latestRate
+      })));
+    } catch (error) {
+      console.error('Failed to load consolidated leader reports:', error);
+      renderSummary();
+      renderBreakdown();
+      body.innerHTML = '<p class="text-muted">No attendance data available yet.</p>';
     }
-
-    for (const session of sessions) {
-      const card = await this.createReportCard(session);
-      container.appendChild(card);
-    }
-  }
-
-  async createReportCard(session) {
-    const card = document.createElement('div');
-    card.className = 'card mb-lg';
-
-    const [attendance, students] = await Promise.all([
-      getAttendanceBySession(session.id),
-      getStudentsByClass(session.classId)
-    ]);
-
-    const present = attendance.filter(a => a.status === 'present').length;
-    const absent  = attendance.filter(a => a.status === 'absent').length;
-
-    const header = document.createElement('h3');
-    header.textContent = `Session — ${formatDate(session.date)}`;
-    card.appendChild(header);
-
-    const summary = document.createElement('div');
-    summary.innerHTML = `
-      <p><strong>Present:</strong> ${present}</p>
-      <p><strong>Absent:</strong>  ${absent}</p>
-      <p><strong>Total:</strong>   ${attendance.length}</p>
-    `;
-    card.appendChild(summary);
-
-    const rows = attendance.map(record => {
-      const student = students.find(s => s.id === record.studentId);
-      return {
-        Student: student ? student.name : 'Unknown',
-        Status:  record.status === 'present' ? 'Present' : 'Absent'
-      };
-    });
-
-    card.appendChild(createTable(['Student', 'Status'], rows));
-    return card;
   }
 
   // BUG FIX (refactor): delegates to shared renderAnalyticsTab from analytics-utils.js
