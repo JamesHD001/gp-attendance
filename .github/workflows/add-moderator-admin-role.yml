@@ -1,0 +1,48 @@
+name: Add moderator role to admin user creation
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update-admin-user-form:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update admin user role selector
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('js/modules/admin-dashboard.js')
+          text = path.read_text(encoding='utf-8')
+
+          old = "const roleSelect = createSelect([{ label:'Select role...',value:'' },{ label:'Instructor',value:'instructor' },{ label:'Leader',value:'leader' }], 'userRole');"
+          new = "const roleSelect = createSelect([{ label:'Select role...',value:'' },{ label:'Instructor',value:'instructor' },{ label:'Moderator',value:'moderator' },{ label:'Leader',value:'leader' }], 'userRole');"
+          if old not in text:
+              raise SystemExit('Expected role selector was not found; refusing to modify the file.')
+          text = text.replace(old, new, 1)
+
+          old_helper = "helperText.textContent = 'Set the email and password this instructor or leader will use to sign in.';"
+          new_helper = "helperText.textContent = 'Set the email and password this instructor, moderator, or leader will use to sign in.';"
+          if old_helper not in text:
+              raise SystemExit('Expected helper text was not found; refusing to modify the file.')
+          text = text.replace(old_helper, new_helper, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit and remove bootstrap workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/admin-dashboard.js .github/workflows/add-moderator-admin-role.yml
+          git commit -m "feat: allow admins to create moderators" \
+            || { echo "No changes needed"; exit 0; }
+          git push
