@@ -7,15 +7,14 @@ root = Path('.')
 auth = root / 'js/modules/auth.js'
 s = auth.read_text()
 if 'case "moderator":' not in s:
-    pattern = r'(case\s+["\']admin["\']:\s*\n\s*redirectPath\s*=\s*AuthService\.getDashboardPath\(["\']admin-dashboard\.html["\']\);)'
+    pattern = r'(case\s+["\']admin["\']:\s*\n\s*redirectPath\s*=\s*AuthService\.getDashboardPath\(["\']admin-dashboard\.html["\']\);\s*\n\s*break;)'
     match = re.search(pattern, s)
     if not match:
         raise SystemExit('Could not find the admin redirect case in auth.js')
-    replacement = "case \"admin\":\n          redirectPath = AuthService.getDashboardPath('admin-dashboard.html');\n          break;\n\n        case \"moderator\":\n          redirectPath = AuthService.getDashboardPath('moderator-dashboard.html');"
+    replacement = "case \"admin\":\n          redirectPath = AuthService.getDashboardPath('admin-dashboard.html');\n          break;\n\n        case \"moderator\":\n          redirectPath = AuthService.getDashboardPath('moderator-dashboard.html');\n          break;"
     s = s[:match.start()] + replacement + s[match.end():]
     auth.write_text(s)
 
-# Add narrowly scoped moderator permissions to Firestore.
 rules_path = root / 'firestore.rules'
 rules = rules_path.read_text()
 
@@ -25,18 +24,32 @@ if 'function isModerator()' not in rules:
         raise SystemExit('isAdmin helper not found in firestore.rules')
     rules = rules.replace(needle, needle + "\n    function isModerator() {\n      return isSignedIn() && getUserRole(request.auth.uid) == 'moderator';\n    }\n\n    function canModerateAttendance() {\n      return isAdmin() || isModerator();\n    }\n", 1)
 
+# Moderators need read access to instructor/user records, but never write access.
+rules = rules.replace('      // Admins can read all users\n      allow read: if isAdmin();', '      // Admins and moderators can read all users\n      allow read: if isAdmin() || isModerator();', 1)
+
 if 'function getStudentData(studentId)' not in rules:
     needle = '    function studentBelongsToClass(studentId, classId) {'
     if needle in rules:
         rules = rules.replace(needle, "    function getStudentData(studentId) {\n      return exists(/databases/$(database)/documents/students/$(studentId))\n        ? get(/databases/$(database)/documents/students/$(studentId)).data\n        : null;\n    }\n\n" + needle, 1)
-
 rules = re.sub(r'(function studentBelongsToClass\(studentId, classId\) \{\s*let studentData = )getUserData\(studentId\);', r'\1getStudentData(studentId);', rules, count=1)
+
+# Keep only one sessionDoc helper if an earlier version already contained it.
+session_doc = """    function sessionDoc(sessionId) {
+      return exists(/databases/$(database)/documents/attendanceSessions/$(sessionId))
+        ? get(/databases/$(database)/documents/attendanceSessions/$(sessionId)).data
+        : null;
+    }
+"""
+while rules.count(session_doc) > 1:
+    first = rules.find(session_doc)
+    second = rules.find(session_doc, first + len(session_doc))
+    rules = rules[:second] + rules[second + len(session_doc):]
 
 if 'function moderatorOwnsSession(sessionId)' not in rules:
     marker = '    function canModerateAttendance() {\n      return isAdmin() || isModerator();\n    }\n'
     if marker not in rules:
         raise SystemExit('Moderator helper marker not found')
-    rules = rules.replace(marker, marker + "\n    function sessionDoc(sessionId) {\n      return exists(/databases/$(database)/documents/attendanceSessions/$(sessionId))\n        ? get(/databases/$(database)/documents/attendanceSessions/$(sessionId)).data\n        : null;\n    }\n\n    function moderatorOwnsSession(sessionId) {\n      let session = sessionDoc(sessionId);\n      return isModerator() && session != null && session.createdBy == request.auth.uid;\n    }\n", 1)
+    rules = rules.replace(marker, marker + session_doc + "\n    function moderatorOwnsSession(sessionId) {\n      let session = sessionDoc(sessionId);\n      return isModerator() && session != null && session.createdBy == request.auth.uid;\n    }\n", 1)
 
 if 'allow create: if isModerator()' not in rules:
     marker = '      // Instructors may create sessions for their own class'
