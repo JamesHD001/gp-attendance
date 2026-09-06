@@ -1876,11 +1876,11 @@ export class AdminDashboard {
     const emailInput = createInput('email', 'Email', 'userEmail');
     const passwordInput = createInput('password', 'Set a login password', 'userPassword');
     const confirmPasswordInput = createInput('password', 'Confirm login password', 'userPasswordConfirm');
-    const roleSelect = createSelect([{ label:'Select role...',value:'' },{ label:'Instructor',value:'instructor' },{ label:'Leader',value:'leader' }], 'userRole');
+    const roleSelect = createSelect([{ label:'Select role...',value:'' },{ label:'Instructor',value:'instructor' },{ label:'Moderator',value:'moderator' },{ label:'Leader',value:'leader' }], 'userRole');
     const classSelect = createSelect([{ label:'No class assigned',value:'' }, ...this.classes.map(c=>({ label:c.name,value:c.id }))], 'userClass');
     const helperText = document.createElement('p');
     helperText.className = 'text-muted';
-    helperText.textContent = 'Set the email and password this instructor or leader will use to sign in.';
+    helperText.textContent = 'Set the email and password this instructor, moderator, or leader will use to sign in.';
 
     emailInput.autocomplete = 'email';
     nameInput.autocomplete = 'name';
