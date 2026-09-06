@@ -762,6 +762,10 @@ export class AuthService {
           redirectPath = AuthService.getDashboardPath('admin-dashboard.html');
           break;
 
+        case "moderator":
+          redirectPath = AuthService.getDashboardPath('moderator-dashboard.html');
+          break;
+
         case "instructor":
           redirectPath = AuthService.getDashboardPath('instructor-dashboard.html');
           break;
