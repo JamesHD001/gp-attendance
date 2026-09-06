@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moderator Dashboard - YSA GP Attendance System</title>
+<link rel="stylesheet" href="../css/styles.css">
+<script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="admin-dashboard-page">
+<div class="dashboard-shell">
+<nav class="sidebar admin-sidebar" id="moderatorSidebar" aria-label="Moderator navigation">
+<div class="sidebar-brand"><div><div class="brand-mark">GP</div></div><div><div class="brand-title">YSA GP</div><div class="brand-subtitle">Moderator Console</div></div></div>
+<div class="sidebar-section-label">Workspace</div>
+<ul class="nav">
+<li class="nav-item"><a href="#overview" class="nav-link active" data-tab="overview"><span class="nav-icon" data-lucide="layout-dashboard"></span><span class="nav-label">Overview</span></a></li>
+<li class="nav-item"><a href="#class-attendance" class="nav-link" data-tab="class-attendance"><span class="nav-icon" data-lucide="book-open-check"></span><span class="nav-label">Class Attendance</span></a></li>
+<li class="nav-item"><a href="#general-attendance" class="nav-link" data-tab="general-attendance"><span class="nav-icon" data-lucide="clipboard-check"></span><span class="nav-label">General Attendance</span></a></li>
+<li class="nav-item"><a href="#instructor-attendance" class="nav-link" data-tab="instructor-attendance"><span class="nav-icon" data-lucide="user-check"></span><span class="nav-label">Instructor Attendance</span></a></li>
+<li class="nav-item"><a href="#classes" class="nav-link" data-tab="classes"><span class="nav-icon" data-lucide="book-open"></span><span class="nav-label">Classes</span></a></li>
+<li class="nav-item"><a href="#students" class="nav-link" data-tab="students"><span class="nav-icon" data-lucide="users"></span><span class="nav-label">Students</span></a></li>
+<li class="nav-item"><a href="#users" class="nav-link" data-tab="users"><span class="nav-icon" data-lucide="users-round"></span><span class="nav-label">Instructors</span></a></li>
+</ul>
+<div class="sidebar-bottom"><button id="logoutBtn" class="sidebar-nav-action" type="button"><span class="nav-icon" data-lucide="log-out"></span><span class="nav-label">Logout</span></button></div>
+</nav>
+<div class="dashboard-main-area"><header class="dashboard-topbar"><div><div class="topbar-kicker">The Church of Jesus Christ of Latter-day Saints</div><div class="topbar-title">IJEBU-ODE Stake YSA GP Attendance System</div></div><span id="datetime" class="topbar-time"></span></header><main class="main-content" id="moderatorContent"></main><footer class="footer"><p>&copy; 2026 IJEBU-ODE STAKE YSA GP</p></footer></div>
+</div>
+<script type="module" src="../js/modules/moderator-dashboard.js"></script>
+<script>function updateClock(){const e=document.getElementById('datetime');if(e)e.textContent=new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});}updateClock();setInterval(updateClock,60000);if(window.lucide)window.lucide.createIcons();</script>
+</body>
+</html>
