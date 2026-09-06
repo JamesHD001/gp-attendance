@@ -3,7 +3,7 @@ name: Apply moderator role security
 on:
   push:
     branches:
-      - feature/moderator-role
+      - main
     paths:
       - 'scripts/apply-moderator-security.py'
       - '.github/workflows/apply-moderator-security.yml'
@@ -33,4 +33,4 @@ jobs:
             exit 0
           fi
           git commit -m "feat: enable moderator authentication and attendance security"
-          git push origin HEAD:feature/moderator-role
+          git push origin HEAD:main
