@@ -1,0 +1,164 @@
+name: Refactor General Attendance
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch admin general attendance
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('js/modules/admin-dashboard.js')
+          text = path.read_text(encoding='utf-8')
+
+          pattern = r"  async showMarkGeneralAttendanceModal\(\) \{.*?\n  \}\n\n  getInstructorForClass"
+          replacement = '''  async showMarkGeneralAttendanceModal() {
+    const students = [...this.students].sort((left, right) =>
+      String(left?.name || '').localeCompare(String(right?.name || ''), undefined, { sensitivity: 'base' })
+    );
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const defaultDate = `${yyyy}-${mm}-${dd}`;
+
+    const dateInput = createInput('date', '', 'generalAttendanceDate', { value: defaultDate });
+    const wrapper = document.createElement('div');
+    const description = document.createElement('p');
+    description.className = 'text-muted';
+    description.textContent = 'Mark every student as Present or Absent for the Gathering Place.';
+    wrapper.append(dateInput, description);
+
+    if (!students.length) {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted';
+      empty.textContent = 'No students are available to record.';
+      wrapper.appendChild(empty);
+    } else {
+      const list = document.createElement('div');
+      list.className = 'attendance-list';
+
+      students.forEach(student => {
+        const row = document.createElement('div');
+        row.className = 'attendance-row';
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = 'minmax(0, 1fr) auto auto';
+        row.style.gap = '1rem';
+        row.style.alignItems = 'center';
+        row.style.padding = '0.75rem 0';
+
+        const name = document.createElement('div');
+        name.textContent = student.name || student.id;
+
+        const presentLabel = document.createElement('label');
+        const present = document.createElement('input');
+        present.type = 'radio';
+        present.name = `admin-general-attendance-${student.id}`;
+        present.value = 'present';
+        present.checked = true;
+        present.dataset.studentId = student.id;
+        presentLabel.append(present, document.createTextNode(' Present'));
+
+        const absentLabel = document.createElement('label');
+        const absent = document.createElement('input');
+        absent.type = 'radio';
+        absent.name = `admin-general-attendance-${student.id}`;
+        absent.value = 'absent';
+        absent.dataset.studentId = student.id;
+        absentLabel.append(absent, document.createTextNode(' Absent'));
+
+        row.append(name, presentLabel, absentLabel);
+        list.appendChild(row);
+      });
+
+      wrapper.appendChild(list);
+    }
+
+    const saveBtn = createButton('Save Attendance', async () => {
+      if (!dateInput.value) {
+        showNotification('Select an attendance date first.', 'warning');
+        return;
+      }
+      if (!students.length) {
+        showNotification('There are no students to record.', 'warning');
+        return;
+      }
+
+      try {
+        const records = students.map(student => {
+          const selected = wrapper.querySelector(`input[data-student-id="${student.id}"]:checked`);
+          return { studentId: student.id, status: selected?.value || 'present' };
+        });
+        const present = records.filter(record => record.status === 'present').length;
+        const absent = records.length - present;
+
+        modal.remove();
+        await createSession({
+          classId: 'GENERAL',
+          date: dateInput.value,
+          records,
+          createdBy: this.currentUser?.uid,
+          generalSummary: { present, absent, total: records.length }
+        });
+        showNotification(`General attendance recorded: ${present} present, ${absent} absent`, 'success');
+        this.renderOverviewTab();
+      } catch (err) {
+        console.error('Failed to create general attendance session', err);
+        showNotification(err?.message || 'Failed to record general attendance', 'error');
+      }
+    }, { className: 'btn-primary' });
+
+    const cancelBtn = createButton('Cancel', () => modal.remove(), { className: 'btn-secondary' });
+    const modal = createModal('Mark General Attendance', wrapper, [saveBtn, cancelBtn]);
+    document.body.appendChild(modal);
+  }
+
+  getInstructorForClass'''
+
+          updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit('Could not locate admin general attendance method')
+          path.write_text(updated, encoding='utf-8')
+          PY
+
+      - name: Patch moderator general attendance rules
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('firestore.rules')
+          text = path.read_text(encoding='utf-8')
+          old = '''        ((get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.classId == sessionDoc(request.resource.data.sessionId).classId) ||
+         (get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.sharedClassIds != null &&
+          sessionDoc(request.resource.data.sessionId).classId in get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.sharedClassIds));'''
+          new = '''        (sessionDoc(request.resource.data.sessionId).classId == 'GENERAL' &&
+         sessionDoc(request.resource.data.sessionId).isGeneral == true ||
+         (get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.classId == sessionDoc(request.resource.data.sessionId).classId) ||
+         (get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.sharedClassIds != null &&
+          sessionDoc(request.resource.data.sessionId).classId in get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.sharedClassIds));'''
+          if old not in text:
+              raise SystemExit('Could not locate moderator attendance-record rule')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Commit changes and remove temporary workflow
+        run: |
+          rm -f .github/workflows/refactor-general-attendance.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/admin-dashboard.js firestore.rules .github/workflows/refactor-general-attendance.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "refactor: mark general attendance per student"
+          git push
