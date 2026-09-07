@@ -11,6 +11,7 @@
 - [x] Block moderator student management.
 - [x] Block moderator class creation, editing, locking, and deletion.
 - [x] Enforce moderator permissions in Firestore Security Rules.
+- [x] Refactor admin and moderator general attendance to record each student's present/absent status.
 - [ ] Run the complete Firestore emulator test suite against the updated rules.
 - [ ] Test the moderator workflow with a real Firebase moderator account.
 - [ ] Deploy the updated Firestore rules to the production Firebase project.
