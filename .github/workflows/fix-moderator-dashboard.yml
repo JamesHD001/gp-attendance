@@ -1,0 +1,39 @@
+name: Fix moderator dashboard loading
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch moderator dashboard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('js/modules/moderator-dashboard.js')
+          s = p.read_text()
+          old = "    await Promise.all([this.loadClasses(), this.loadUsers(), this.loadStudents()]);\n    this.bindNavigation();\n    this.tab = window.location.hash.replace('#', '') || 'overview';\n    this.render();"
+          new = "    const results = await Promise.allSettled([\n      this.loadClasses(),\n      this.loadUsers(),\n      this.loadStudents()\n    ]);\n    const failures = results.filter(result => result.status === 'rejected');\n    if (failures.length) {\n      console.warn('Moderator dashboard data loading completed with failures:', failures);\n      showNotification('Some dashboard data could not be loaded. Available sections are still shown.', 'warning');\n    }\n    this.bindNavigation();\n    this.tab = window.location.hash.replace('#', '') || 'overview';\n    this.render();"
+          if old not in s: raise SystemExit('Expected init block not found')
+          s = s.replace(old, new, 1)
+          old2 = "  async loadClasses() { this.classes = await getClasses(); }\n  async loadUsers() { this.users = await getAllUsers(); }\n  async loadStudents() { this.students = await getStudents(); }"
+          new2 = "  async loadClasses() {\n    try { this.classes = await getClasses(); }\n    catch (error) { console.error('Moderator: failed to load classes', error); this.classes = []; throw error; }\n  }\n\n  async loadUsers() {\n    try { this.users = await getAllUsers(); }\n    catch (error) { console.error('Moderator: failed to load users', error); this.users = []; throw error; }\n  }\n\n  async loadStudents() {\n    try { this.students = await getStudents(); }\n    catch (error) { console.error('Moderator: failed to load students', error); this.students = []; throw error; }\n  }"
+          if old2 not in s: raise SystemExit('Expected load methods not found')
+          s = s.replace(old2, new2, 1)
+          old3 = "    const main = document.getElementById('moderatorContent');\n    clearElement(main);"
+          new3 = "    const main = document.getElementById('moderatorContent');\n    if (!main) { console.error('Moderator dashboard container #moderatorContent was not found.'); return; }\n    clearElement(main);"
+          if old3 not in s: raise SystemExit('Expected render container block not found')
+          s = s.replace(old3, new3, 1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/moderator-dashboard.js
+          git commit -m "fix: keep moderator dashboard usable when data load fails"
+          git push origin main
