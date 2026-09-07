@@ -24,15 +24,17 @@ class ModeratorDashboard {
       return;
     }
 
-    await Promise.all([this.loadClasses(), this.loadUsers(), this.loadStudents()]);
+    const results = await Promise.allSettled([this.loadClasses(), this.loadUsers(), this.loadStudents()]);
+    const failures = results.filter(result => result.status === 'rejected');
+    if (failures.length) showNotification('Some dashboard data could not be loaded. Available sections are still shown.', 'warning');
     this.bindNavigation();
     this.tab = window.location.hash.replace('#', '') || 'overview';
     this.render();
   }
 
-  async loadClasses() { this.classes = await getClasses(); }
-  async loadUsers() { this.users = await getAllUsers(); }
-  async loadStudents() { this.students = await getStudents(); }
+  async loadClasses() { try { this.classes = await getClasses(); } catch (error) { console.error('Moderator: failed to load classes', error); this.classes = []; throw error; } }
+  async loadUsers() { try { this.users = await getAllUsers(); } catch (error) { console.error('Moderator: failed to load users', error); this.users = []; throw error; } }
+  async loadStudents() { try { this.students = await getStudents(); } catch (error) { console.error('Moderator: failed to load students', error); this.students = []; throw error; } }
 
   bindNavigation() {
     document.querySelectorAll('[data-tab]').forEach(link => link.addEventListener('click', event => {
@@ -46,6 +48,7 @@ class ModeratorDashboard {
 
   render() {
     const main = document.getElementById('moderatorContent');
+    if (!main) { console.error('Moderator dashboard container #moderatorContent was not found.'); return; }
     clearElement(main);
 
     const header = document.createElement('div');
