@@ -24,17 +24,50 @@ class ModeratorDashboard {
       return;
     }
 
-    const results = await Promise.allSettled([this.loadClasses(), this.loadUsers(), this.loadStudents()]);
+    const results = await Promise.allSettled([
+      this.loadClasses(),
+      this.loadUsers(),
+      this.loadStudents()
+    ]);
     const failures = results.filter(result => result.status === 'rejected');
-    if (failures.length) showNotification('Some dashboard data could not be loaded. Available sections are still shown.', 'warning');
+    if (failures.length) {
+      showNotification('Some dashboard data could not be loaded. Check the affected section and Firebase permissions.', 'warning');
+    }
+
     this.bindNavigation();
     this.tab = window.location.hash.replace('#', '') || 'overview';
     this.render();
   }
 
-  async loadClasses() { try { this.classes = await getClasses(); } catch (error) { console.error('Moderator: failed to load classes', error); this.classes = []; throw error; } }
-  async loadUsers() { try { this.users = await getAllUsers(); } catch (error) { console.error('Moderator: failed to load users', error); this.users = []; throw error; } }
-  async loadStudents() { try { this.students = await getStudents(); } catch (error) { console.error('Moderator: failed to load students', error); this.students = []; throw error; } }
+  async loadClasses() {
+    try {
+      this.classes = await getClasses();
+    } catch (error) {
+      console.error('Moderator: failed to load classes', error);
+      this.classes = [];
+      throw error;
+    }
+  }
+
+  async loadUsers() {
+    try {
+      this.users = await getAllUsers();
+    } catch (error) {
+      console.error('Moderator: failed to load users/instructors', error);
+      this.users = [];
+      throw error;
+    }
+  }
+
+  async loadStudents() {
+    try {
+      this.students = await getStudents();
+    } catch (error) {
+      console.error('Moderator: failed to load students', error);
+      this.students = [];
+      throw error;
+    }
+  }
 
   bindNavigation() {
     document.querySelectorAll('[data-tab]').forEach(link => link.addEventListener('click', event => {
@@ -48,7 +81,10 @@ class ModeratorDashboard {
 
   render() {
     const main = document.getElementById('moderatorContent');
-    if (!main) { console.error('Moderator dashboard container #moderatorContent was not found.'); return; }
+    if (!main) {
+      console.error('Moderator dashboard container #moderatorContent was not found.');
+      return;
+    }
     clearElement(main);
 
     const header = document.createElement('div');
@@ -134,7 +170,14 @@ class ModeratorDashboard {
         loadedStudents = [];
         return;
       }
-      loadedStudents = await getStudentsByClass(classSelect.value);
+      try {
+        loadedStudents = await getStudentsByClass(classSelect.value);
+      } catch (error) {
+        console.error('Moderator: failed to load class roster', error);
+        list.innerHTML = '<p class="text-muted">Unable to load this class roster. Check Firebase permissions.</p>';
+        loadedStudents = [];
+        return;
+      }
       if (!loadedStudents.length) {
         list.innerHTML = '<p class="text-muted">No students are assigned to this class.</p>';
         return;
@@ -153,7 +196,10 @@ class ModeratorDashboard {
     classSelect.addEventListener('change', () => void load());
 
     body.appendChild(createButton('Save Attendance', async () => {
-      if (!classSelect.value) { showNotification('Select a class first.', 'warning'); return; }
+      if (!classSelect.value) {
+        showNotification('Select a class first.', 'warning');
+        return;
+      }
       try {
         const records = loadedStudents.map(student => ({
           studentId: student.id,
@@ -177,22 +223,94 @@ class ModeratorDashboard {
     card.innerHTML = '<div class="card-header">Mark General Gathering Place Attendance</div>';
     const body = document.createElement('div');
     body.className = 'card-body';
+
     const dateInput = createInput('date', 'Attendance date', 'generalAttendanceDate', { value: new Date().toISOString().slice(0, 10) });
-    const present = createInput('number', 'Present', 'generalPresent');
-    const absent = createInput('number', 'Absent', 'generalAbsent');
-    present.min = absent.min = '0';
-    body.append(dateInput, present, absent);
+    body.appendChild(dateInput);
+
+    const description = document.createElement('p');
+    description.className = 'text-muted';
+    description.textContent = 'All students are listed below. Select Present or Absent for each student.';
+    body.appendChild(description);
+
+    const list = document.createElement('div');
+    list.className = 'attendance-list mt-md';
+    body.appendChild(list);
+
+    const students = [...this.students].sort((left, right) =>
+      String(left?.name || '').localeCompare(String(right?.name || ''), undefined, { sensitivity: 'base' })
+    );
+
+    if (!students.length) {
+      list.innerHTML = '<p class="text-muted">No students are available.</p>';
+    } else {
+      const table = document.createElement('div');
+      table.className = 'attendance-table';
+      const header = document.createElement('div');
+      header.className = 'attendance-row attendance-header';
+      header.innerHTML = '<div>Student</div><div>Present</div><div>Absent</div>';
+      table.appendChild(header);
+
+      students.forEach(student => {
+        const row = document.createElement('div');
+        row.className = 'attendance-row';
+        const name = document.createElement('div');
+        name.textContent = student.name || student.id;
+        const presentLabel = document.createElement('label');
+        const present = document.createElement('input');
+        present.type = 'radio';
+        present.name = `general-attendance-${student.id}`;
+        present.value = 'present';
+        present.checked = true;
+        present.dataset.studentId = student.id;
+        present.dataset.status = 'present';
+        presentLabel.append(present, document.createTextNode(' Present'));
+        const absentLabel = document.createElement('label');
+        const absent = document.createElement('input');
+        absent.type = 'radio';
+        absent.name = `general-attendance-${student.id}`;
+        absent.value = 'absent';
+        absent.dataset.studentId = student.id;
+        absent.dataset.status = 'absent';
+        absentLabel.append(absent, document.createTextNode(' Absent'));
+        row.append(name, presentLabel, absentLabel);
+        table.appendChild(row);
+      });
+      list.appendChild(table);
+    }
+
     body.appendChild(createButton('Save General Attendance', async () => {
-      const p = Number(present.value || 0), a = Number(absent.value || 0);
-      if (p < 0 || a < 0) { showNotification('Attendance values cannot be negative.', 'warning'); return; }
+      if (!dateInput.value) {
+        showNotification('Select an attendance date first.', 'warning');
+        return;
+      }
+      if (!students.length) {
+        showNotification('There are no students to record.', 'warning');
+        return;
+      }
+
       try {
-        await createSession({ classId: 'GENERAL', date: dateInput.value, generalSummary: { present: p, absent: a, total: p + a }, createdBy: this.user.uid });
-        showNotification('General attendance saved.', 'success');
+        const records = students.map(student => {
+          const selected = list.querySelector(`input[data-student-id="${student.id}"]:checked`);
+          return { studentId: student.id, status: selected?.value || 'present' };
+        });
+
+        const present = records.filter(record => record.status === 'present').length;
+        const absent = records.length - present;
+
+        await createSession({
+          classId: 'GENERAL',
+          date: dateInput.value,
+          records,
+          generalSummary: { present, absent, total: records.length },
+          createdBy: this.user.uid
+        });
+        showNotification(`General attendance saved: ${present} present, ${absent} absent.`, 'success');
       } catch (error) {
         console.error(error);
         showNotification(error?.message || 'Failed to save general attendance.', 'error');
       }
     }, { className: 'btn-primary' }));
+
     card.appendChild(body);
     main.appendChild(card);
   }
@@ -206,17 +324,30 @@ class ModeratorDashboard {
     const dateInput = createInput('date', 'Attendance date', 'instructorAttendanceDate', { value: new Date().toISOString().slice(0, 10) });
     const list = document.createElement('div');
     list.className = 'attendance-list mt-md';
-    const instructors = this.users.filter(user => user.role === 'instructor');
+    const instructors = this.users
+      .filter(user => user.role === 'instructor')
+      .sort((left, right) => String(left?.name || left?.email || '').localeCompare(String(right?.name || right?.email || ''), undefined, { sensitivity: 'base' }));
+
+    if (!instructors.length) {
+      list.innerHTML = '<p class="text-muted">No instructor records are available. If instructors exist, check Firebase user-read permissions for moderators.</p>';
+    }
+
     instructors.forEach(instructor => {
       const row = document.createElement('label');
       row.className = 'flex gap-md align-center mb-sm';
       const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox'; checkbox.checked = true; checkbox.dataset.instructorId = instructor.id;
+      checkbox.type = 'checkbox';
+      checkbox.checked = true;
+      checkbox.dataset.instructorId = instructor.id;
       row.append(checkbox, document.createTextNode(instructor.name || instructor.email || instructor.id));
       list.appendChild(row);
     });
     body.append(dateInput, list);
     body.appendChild(createButton('Save Instructor Attendance', async () => {
+      if (!instructors.length) {
+        showNotification('No instructors are available to record.', 'warning');
+        return;
+      }
       try {
         const date = dateInput.value;
         for (const instructor of instructors) {
