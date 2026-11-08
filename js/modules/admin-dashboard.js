@@ -385,7 +385,9 @@ export class AdminDashboard {
 
     return new Promise(resolve => {
       const content = document.createElement('div');
-      content.innerHTML = `<p>${message}</p>`;
+      const paragraph = document.createElement('p');
+      paragraph.textContent = message;
+      content.appendChild(paragraph);
 
       let modal;
       const confirmBtn = createButton(confirmText, () => {
@@ -628,7 +630,9 @@ export class AdminDashboard {
     const showForClass = async (cls) => {
       const students = allStudents.filter(student => studentHasClass(student, cls.id));
       const container = document.createElement('div');
-      container.innerHTML = `<h3>Mark Attendance — ${cls.name}</h3>`;
+      const heading = document.createElement('h3');
+      heading.textContent = `Mark Attendance — ${cls.name}`;
+      container.appendChild(heading);
 
       if (!students.length) {
         const msg = document.createElement('p'); msg.className = 'text-muted'; msg.textContent = 'No students in this class.'; container.appendChild(msg);
@@ -889,7 +893,7 @@ export class AdminDashboard {
 
           const deleteBtn = createButton('Delete', async () => {
             const content = document.createElement('div');
-            content.innerHTML = `<p>Delete <strong>${cls.name}</strong>? This will remove the class and all associated data.</p>`;
+            content.textContent = `Delete ${cls.name}? This will remove the class and all associated data.`;
             const confirmBtn = createButton('Delete', async () => {
               try {
                 await deleteClass(cls.id);
@@ -995,7 +999,7 @@ export class AdminDashboard {
         const btn = document.createElement('button'); btn.className = 'btn btn-danger btn-small'; btn.textContent = 'Delete';
         btn.addEventListener('click', () => {
           const content = document.createElement('div');
-          content.innerHTML = `<p>Delete user <strong>${user.name}</strong>? This will remove their access and profile from the system.</p>`;
+          content.textContent = `Delete user ${user.name}? This will remove their access and profile from the system.`;
           const confirmBtn = createButton('Delete', async () => {
             try { await deleteUser(user.id); await this.loadUsers(); this.renderUsersTab(); showNotification('User deleted', 'success'); }
             catch { showNotification('Failed to delete user', 'error'); }
@@ -1090,7 +1094,7 @@ export class AdminDashboard {
           const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger btn-small'; delBtn.textContent = 'Delete';
           delBtn.addEventListener('click', () => {
             const content = document.createElement('div');
-            content.innerHTML = `<p>Delete student <strong>${student.name}</strong>? This will permanently remove the student record.</p>`;
+            content.textContent = `Delete student ${student.name}? This will permanently remove the student record.`;
             const confirmBtn = createButton('Delete', async () => {
               try {
                 if (!student.id) {
@@ -1374,7 +1378,7 @@ export class AdminDashboard {
       const targetClassName = this.getClassName(targetClassId, 'the selected class');
       const confirmed = await this.confirmAction(
         'Add selected students',
-        `Add ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> without changing their primary class?`
+        `Add ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} to ${targetClassName} without changing their primary class?`
       );
       if (!confirmed) return;
 
@@ -1409,7 +1413,7 @@ export class AdminDashboard {
       const targetClassName = this.getClassName(targetClassId, 'the selected class');
       const confirmed = await this.confirmAction(
         'Move selected students',
-        `Move ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> as their new primary class?`
+        `Move ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} to ${targetClassName} as their new primary class?`
       );
       if (!confirmed) return;
 
@@ -1438,7 +1442,7 @@ export class AdminDashboard {
 
       const confirmed = await this.confirmAction(
         'Remove selected students from class',
-        `Remove shared enrollments for ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} from <strong>${selectedClass.name}</strong>? Primary class assignments will stay untouched.`
+        `Remove shared enrollments for ${currentSelectedStudents.length} selected student${currentSelectedStudents.length === 1 ? '' : 's'} from ${selectedClass.name}? Primary class assignments will stay untouched.`
       );
       if (!confirmed) return;
 
@@ -1496,7 +1500,7 @@ export class AdminDashboard {
             const removeBtn = createButton('Remove from Class', async () => {
               const confirmed = await this.confirmAction(
                 'Remove student from class',
-                `Remove <strong>${student.name || 'this student'}</strong> from <strong>${selectedClass.name}</strong>? Their primary class stays the same.`
+                `Remove ${student.name || 'this student'} from ${selectedClass.name}? Their primary class stays the same.`
               );
               if (!confirmed) return;
 
@@ -1566,7 +1570,7 @@ export class AdminDashboard {
       const targetClassName = this.getClassName(targetClassId, 'the selected class');
       const confirmed = await this.confirmAction(
         'Add everyone to class',
-        `Add all ${this.students.length} student${this.students.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> while keeping their current primary class assignments?`
+        `Add all ${this.students.length} student${this.students.length === 1 ? '' : 's'} to ${targetClassName} while keeping their current primary class assignments?`
       );
       if (!confirmed) return;
 
@@ -1595,7 +1599,7 @@ export class AdminDashboard {
       const targetClassName = this.getClassName(targetClassId, 'the selected class');
       const confirmed = await this.confirmAction(
         'Move all students to class',
-        `Move all ${this.students.length} student${this.students.length === 1 ? '' : 's'} to <strong>${targetClassName}</strong> as their primary class?`,
+        `Move all ${this.students.length} student${this.students.length === 1 ? '' : 's'} to ${targetClassName} as their primary class?`,
         { confirmText: 'Move Everyone', confirmClassName: 'btn-danger' }
       );
       if (!confirmed) return;
@@ -1720,7 +1724,7 @@ export class AdminDashboard {
               const recordCount = attendance.length;
               const confirmed = await this.confirmAction(
                 'Delete attendance session',
-                `Delete the session on <strong>${formatDate(session.date)}</strong>? This also removes ${recordCount} attendance record${recordCount === 1 ? '' : 's'}.`,
+                `Delete the session on ${formatDate(session.date)}? This also removes ${recordCount} attendance record${recordCount === 1 ? '' : 's'}.`,
                 { confirmText: 'Delete Session', confirmClassName: 'btn-danger' }
               );
               if (!confirmed) return;
@@ -1822,7 +1826,7 @@ export class AdminDashboard {
               return createButton('Delete', async () => {
                 const confirmed = await this.confirmAction(
                   'Delete general session',
-                  `Delete the general attendance session on <strong>${formatDate(session.date)}</strong>?`,
+                  `Delete the general attendance session on ${formatDate(session.date)}?`,
                   { confirmText: 'Delete Session', confirmClassName: 'btn-danger' }
                 );
                 if (!confirmed) return;

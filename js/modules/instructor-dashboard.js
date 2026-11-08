@@ -141,7 +141,7 @@ export class InstructorDashboard {
 
     if (notifyOnNewLock && justLocked && !this.hasShownAttendanceLockNotice) {
       this.hasShownAttendanceLockNotice = true;
-      showNotification('Attendance is now locked for today. Instructors cannot mark attendance after 4:00 PM Nigerian time.', 'warning');
+      showNotification('Attendance is now locked for today. Instructors cannot mark attendance after 6:30 PM Nigerian time.', 'warning');
     }
 
     if (!this.attendanceLockState.isLocked) {
@@ -555,7 +555,7 @@ export class InstructorDashboard {
         delBtn.className = 'btn btn-danger btn-small'; delBtn.textContent = 'Delete';
         delBtn.addEventListener('click', () => {
           const content = document.createElement('div');
-          content.innerHTML = `<p>Delete <strong>${s.name}</strong>? This will permanently remove the student record.</p>`;
+          content.textContent = `Delete ${s.name}? This will permanently remove the student record.`;
           const confirmBtn = createButton('Delete', async () => {
             try { await deleteStudent(s.id); await this.loadStudents(); this.renderStudentsTab(); showNotification('Student removed', 'success'); }
             catch (err) { console.error(err); showNotification('Failed to delete student', 'error'); }
@@ -726,7 +726,7 @@ export class InstructorDashboard {
     this.refreshAttendanceLockState();
     if (this.attendanceLockState?.isLocked) {
       this.renderAttendanceTab();
-      showNotification('Attendance is locked for today. Instructors cannot mark attendance after 4:00 PM Nigerian time.', 'warning');
+      showNotification('Attendance is locked for today. Instructors cannot mark attendance after 6:30 PM Nigerian time.', 'warning');
       return;
     }
 
@@ -741,21 +741,6 @@ export class InstructorDashboard {
         statusMap[r.studentId] = r.status;
       });
     }
-
-    const studentsHTML = this.students.map(s => {
-      const currentStatus = statusMap[s.id] || 'present';
-      return `
-        <tr>
-          <td><strong>${s.name}</strong></td>
-          <td>
-            <select class="form-select" data-id="${s.id}">
-              <option value="present" ${currentStatus === 'present' ? 'selected' : ''}>Present</option>
-              <option value="absent" ${currentStatus === 'absent' ? 'selected' : ''}>Absent</option>
-            </select>
-          </td>
-        </tr>
-      `;
-    }).join("");
 
     container.innerHTML = `
       <div class="flex-between mb-lg align-center">
@@ -777,9 +762,7 @@ export class InstructorDashboard {
                 <th style="width: 150px;">Status</th>
               </tr>
             </thead>
-            <tbody>
-              ${studentsHTML || '<tr><td colspan="2" class="text-muted text-center">No students registered in this class yet.</td></tr>'}
-            </tbody>
+            <tbody></tbody>
           </table>
         </div>
       </div>
@@ -790,13 +773,47 @@ export class InstructorDashboard {
       </div>
     `;
 
+    const studentsTableBody = container.querySelector('tbody');
+    if (!this.students.length) {
+      const emptyRow = document.createElement('tr');
+      const emptyCell = document.createElement('td');
+      emptyCell.colSpan = 2;
+      emptyCell.className = 'text-muted text-center';
+      emptyCell.textContent = 'No students registered in this class yet.';
+      emptyRow.appendChild(emptyCell);
+      studentsTableBody?.appendChild(emptyRow);
+    } else {
+      this.students.forEach(student => {
+        const row = document.createElement('tr');
+        const nameCell = document.createElement('td');
+        const name = document.createElement('strong');
+        name.textContent = student.name || '';
+        nameCell.appendChild(name);
+
+        const statusCell = document.createElement('td');
+        const statusSelect = document.createElement('select');
+        statusSelect.className = 'form-select';
+        statusSelect.dataset.id = student.id;
+        ['present', 'absent'].forEach(status => {
+          const option = document.createElement('option');
+          option.value = status;
+          option.textContent = status === 'present' ? 'Present' : 'Absent';
+          option.selected = (statusMap[student.id] || 'present') === status;
+          statusSelect.appendChild(option);
+        });
+        statusCell.appendChild(statusSelect);
+        row.append(nameCell, statusCell);
+        studentsTableBody?.appendChild(row);
+      });
+    }
+
     document.getElementById("cancelSession")?.addEventListener("click", () => this.renderAttendanceTab());
     
     document.getElementById("saveAttendance")?.addEventListener("click", async () => {
       this.refreshAttendanceLockState();
       if (this.attendanceLockState?.isLocked) {
         this.renderAttendanceTab();
-        showNotification('Attendance is locked for today. Instructors cannot mark attendance after 4:00 PM Nigerian time.', 'warning');
+        showNotification('Attendance is locked for today. Instructors cannot mark attendance after 6:30 PM Nigerian time.', 'warning');
         return;
       }
 

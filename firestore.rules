@@ -29,14 +29,14 @@ service cloud.firestore {
     // support so older instructor documents can still pass scoped writes.
     function getUserAssignedClass(userId) {
       let userData = getUserData(userId);
-      return userData == null
+      let assignedClassId = userData == null
         ? null
-        : (
-          userData.assignedClassId != null &&
-          userData.assignedClassId != ''
-            ? userData.assignedClassId
-            : userData.assignedClass
-        );
+        : userData.get('assignedClassId', null);
+      return assignedClassId != null && assignedClassId != ''
+        ? assignedClassId
+        : userData == null
+          ? null
+          : userData.get('assignedClass', null);
     }
 
     // Helper function to check if user is admin
@@ -80,7 +80,7 @@ service cloud.firestore {
     function instructorAttendanceWindowOpen() {
       let lagosMinutesSinceMidnight =
         ((request.time.toMillis() + (60 * 60 * 1000)) % (24 * 60 * 60 * 1000)) / (60 * 1000);
-      return lagosMinutesSinceMidnight < (16 * 60);
+      return lagosMinutesSinceMidnight < ((18 * 60) + 30);
     }
 
 

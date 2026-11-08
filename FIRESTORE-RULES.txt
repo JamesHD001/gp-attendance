@@ -1,5 +1,7 @@
-// Firestore Security Rules for YSA GP Attendance System
-// Copy and paste these rules into Firebase Console > Firestore > Rules tab
+// DEPRECATED SNAPSHOT — do not deploy these rules.
+// The canonical ruleset is firestore.rules. Deploy it with:
+// firebase deploy --only firestore:rules
+// Validate rule changes with: npm run test:rules
 //
 // Instructor assignment now prefers `assignedClassId` but still accepts the
 // legacy `assignedClass` field during migration.

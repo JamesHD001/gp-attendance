@@ -174,48 +174,13 @@ This writes `js/modules/firebase-config.local.js` (gitignored). The app will imp
 
 ### Step 6: Set Firestore Security Rules
 
-In Firebase Console > Firestore > Rules, use these rules:
+The checked-in [`firestore.rules`](./firestore.rules) file is the canonical ruleset. Deploy it from the project root with:
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Allow read/write only to authenticated users
-    match /users/{userId} {
-      allow read, write: if request.auth.uid == userId ||
-                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    match /classes/{classId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    match /students/{studentId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassId ==
-          get(/databases/$(database)/documents/students/$(studentId)).data.classId
-      );
-    }
-
-    match /attendanceSessions/{sessionId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'leader'
-      );
-    }
-
-    match /attendanceRecords/{recordId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'leader'
-      );
-    }
-  }
-}
+```bash
+firebase deploy --only firestore:rules
 ```
+
+Do not replace it with a simplified rules example: user profile writes must remain admin-only so users cannot grant themselves elevated roles. Validate rule changes with `npm run test:rules` before deployment.
 
 ### Step 7: Create Test Users
 

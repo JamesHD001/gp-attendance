@@ -1,5 +1,5 @@
 export const NIGERIA_TIME_ZONE = 'Africa/Lagos';
-export const INSTRUCTOR_ATTENDANCE_LOCK_HOUR = 18; // 4:00 PM Nigerian time (UTC+1) in 24-hour format
+export const INSTRUCTOR_ATTENDANCE_LOCK_HOUR = 18;
 export const INSTRUCTOR_ATTENDANCE_LOCK_MINUTE = 30;
 
 const MS_PER_MINUTE = 60 * 1000;
@@ -66,7 +66,10 @@ export function getNigeriaDateKey(value = new Date()) {
 }
 
 export function isInstructorAttendanceLocked(now = new Date()) {
-  return getNigeriaNowParts(now).hourNumber >= INSTRUCTOR_ATTENDANCE_LOCK_HOUR;
+  const parts = getNigeriaNowParts(now);
+  return parts.hourNumber > INSTRUCTOR_ATTENDANCE_LOCK_HOUR ||
+    (parts.hourNumber === INSTRUCTOR_ATTENDANCE_LOCK_HOUR &&
+      parts.minuteNumber >= INSTRUCTOR_ATTENDANCE_LOCK_MINUTE);
 }
 
 export function getInstructorAttendanceLockState(now = new Date()) {

@@ -29,7 +29,8 @@ async function run() {
   const projectId = 'gp-attendance-test';
   const rules = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
   const nigeriaNow = getNigeriaNowParts();
-  const instructorAttendanceLocked = nigeriaNow.hourNumber >= 16;
+  const instructorAttendanceLocked = nigeriaNow.hourNumber > 18 ||
+    (nigeriaNow.hourNumber === 18 && nigeriaNow.minuteNumber >= 30);
 
   const testEnv = await initializeTestEnvironment({
     projectId,
@@ -111,6 +112,17 @@ async function run() {
     const instructorContext = testEnv.authenticatedContext('instructor1');
     const instructorDb = instructorContext.firestore();
 
+    console.log('Attempt: instructor promote own account to admin (should fail)');
+    try {
+      await assertFails(setDoc(doc(instructorDb, 'users', 'instructor1'), {
+        role: 'admin'
+      }, { merge: true }));
+      console.log('OK: prevented instructor from changing own role');
+    } catch (e) {
+      console.error('ERROR: instructor self-promotion protection failed', e);
+      throw e;
+    }
+
     console.log('Attempt: instructor add student to own class');
     try {
       await assertSucceeds(addDoc(collection(instructorDb, 'students'), {
@@ -143,7 +155,7 @@ async function run() {
     try {
       if (instructorAttendanceLocked) {
         await assertFails(addDoc(collection(instructorDb, 'attendanceSessions'), sessionData));
-        console.log('OK: instructor session creation blocked after 4:00 PM Nigeria time');
+        console.log('OK: instructor session creation blocked at or after 6:30 PM Nigeria time');
       } else {
         await assertSucceeds(addDoc(collection(instructorDb, 'attendanceSessions'), sessionData));
         console.log('OK: instructor create session for class1');
@@ -204,7 +216,7 @@ async function run() {
     try {
       if (instructorAttendanceLocked) {
         await assertFails(addDoc(collection(instructorDb, 'attendanceRecords'), { sessionId: sessionRef.id, studentId: 's1', status: 'present', createdAt: Timestamp.now() }));
-        console.log('OK: instructor attendance record creation blocked after 4:00 PM Nigeria time');
+        console.log('OK: instructor attendance record creation blocked at or after 6:30 PM Nigeria time');
       } else {
         await assertSucceeds(addDoc(collection(instructorDb, 'attendanceRecords'), { sessionId: sessionRef.id, studentId: 's1', status: 'present', createdAt: Timestamp.now() }));
         console.log('OK: instructor create attendance record');
@@ -249,7 +261,7 @@ async function run() {
     try {
       if (instructorAttendanceLocked) {
         await assertFails(addDoc(collection(legacyInstructorDb, 'attendanceRecords'), { sessionId: legacySessionRef.id, studentId: 'legacy-s1', status: 'present', createdAt: Timestamp.now() }));
-        console.log('OK: legacy instructor attendance record creation blocked after 4:00 PM Nigeria time');
+        console.log('OK: legacy instructor attendance record creation blocked at or after 6:30 PM Nigeria time');
       } else {
         await assertSucceeds(addDoc(collection(legacyInstructorDb, 'attendanceRecords'), { sessionId: legacySessionRef.id, studentId: 'legacy-s1', status: 'present', createdAt: Timestamp.now() }));
         console.log('OK: legacy instructor create attendance record through assignedClass fallback');

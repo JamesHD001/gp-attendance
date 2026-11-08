@@ -65,10 +65,13 @@ async function openInstructorPage(browser, isoInstant) {
     window.Date = MockDate;
   }, fixedTime);
 
-  await page.goto(`${baseUrl}/pages/instructor-dashboard.html`, { waitUntil: 'networkidle2' });
-  await page.waitForSelector('.tab-btn[data-tab="attendance"]', { timeout: 10000 });
-  await page.waitForSelector('#studentsTab .text-muted', { timeout: 10000 });
-  await page.click('.tab-btn[data-tab="attendance"]');
+  await page.goto(`${baseUrl}/pages/instructor-dashboard.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.nav-link[data-tab="attendance"]', { timeout: 10000 });
+  await page.waitForFunction(() => {
+    const overview = document.getElementById('overviewTab');
+    return Boolean(overview?.querySelector('h2') && !overview.querySelector('.tab-skeleton'));
+  }, { timeout: 10000 });
+  await page.$eval('.nav-link[data-tab="attendance"]', link => link.click());
   await page.waitForSelector('#attendanceTab [data-attendance-lock-state]', { timeout: 10000 });
 
   return { page, pageErrors, pageLogs };
@@ -100,7 +103,7 @@ async function main() {
   const browser = await puppeteer.launch(launchOptions);
 
   try {
-    const beforeCutoff = await openInstructorPage(browser, '2026-05-08T14:30:00.000Z');
+    const beforeCutoff = await openInstructorPage(browser, '2026-05-08T17:29:00.000Z');
     const beforeState = await readAttendanceLockState(beforeCutoff.page);
 
     if (beforeCutoff.pageErrors.length) {
@@ -111,13 +114,13 @@ async function main() {
       throw new Error(`Expected attendance to be open before cutoff, received ${JSON.stringify(beforeState)}`);
     }
 
-    if (!beforeState.bannerText.includes('4:00 PM Africa/Lagos')) {
+    if (!beforeState.bannerText.includes('6:30 PM Africa/Lagos')) {
       throw new Error(`Before-cutoff banner did not mention the cutoff: ${beforeState.bannerText}`);
     }
 
     await beforeCutoff.page.close();
 
-    const afterCutoff = await openInstructorPage(browser, '2026-05-08T15:05:00.000Z');
+    const afterCutoff = await openInstructorPage(browser, '2026-05-08T17:35:00.000Z');
     const afterState = await readAttendanceLockState(afterCutoff.page);
 
     if (afterCutoff.pageErrors.length) {
@@ -128,7 +131,7 @@ async function main() {
       throw new Error(`Expected attendance to be locked after cutoff, received ${JSON.stringify(afterState)}`);
     }
 
-    if (!afterState.bannerText.includes('cannot mark or change attendance after 4:00 PM')) {
+    if (!afterState.bannerText.includes('cannot mark or change attendance after 6:30 PM')) {
       throw new Error(`After-cutoff banner did not explain the lock: ${afterState.bannerText}`);
     }
 
